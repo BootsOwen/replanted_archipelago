@@ -17,7 +17,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Unity.Collections;
+using Unity.Mathematics;
 using UnityEngine;
 using static ReplantedArchipelago.Data;
 
@@ -34,14 +36,13 @@ namespace ReplantedArchipelago.Patches
         public static bool redSunText = false;
         public static List<int> availableWaveLocations = new List<int>();
         public static List<int> allWavesanityLocations = new List<int>();
-        public static bool forceChina = false;
-        public static bool forceRetro = false;
-        public static bool forcePlatform = false;
         public static List<SeedLink> queuedSeedLinks = new List<SeedLink>();
         public static List<LawnLink> queuedLawnLinks = new List<LawnLink>();
         public static DateTime resetLinkMessageAt;
         public static bool linkMessageActive = false;
         public static bool lawnLinkBlocked = false;
+        public static int wavePointsAdjusted = -1;
+        public static List<ZombieGrowingInformation> growingZombies = new List<ZombieGrowingInformation>();
 
         [HarmonyPatch(typeof(GameplayActivity), nameof(GameplayActivity.ActiveUpdate))] //Runs every frame during gameplay
         public class GameplayActivityUpdatePatch
@@ -62,7 +63,7 @@ namespace ReplantedArchipelago.Patches
                     }
                 }
 
-                if (Main.currentScene != "Gameplay" || __instance == null || __instance.m_board == null || !(__instance.GameScene == GameScenes.Playing || __instance.GameScene == GameScenes.LevelIntro))
+                if (Main.currentScene != "Gameplay" || __instance == null || __instance.m_board == null || !(__instance.GameScene == GameScenes.Playing || __instance.GameScene == GameScenes.LevelIntro) || __instance.m_board.mPaused)
                 {
                     return;
                 }
@@ -306,16 +307,16 @@ namespace ReplantedArchipelago.Patches
                                     if (displayingSeedStatsIndex != seedIndex && Data.seedTypes.Contains(theSeedType))
                                     {
                                         int plantIndex = Array.FindIndex(Data.seedTypes, seedType => seedType == theSeedType);
-                                        if (Data.plantStats.ContainsKey(Data.seedTypes[plantIndex]))
+                                        if (PlantStatRando.plantStats.ContainsKey(Data.seedTypes[plantIndex]))
                                         {
                                             tooltipObject.transform.Find("Name").GetComponent<TextMeshProUGUI>().text = Data.plantNames[plantIndex];
                                             if (hasConveyor)
                                             {
-                                                tooltipObject.transform.Find("Description").GetComponent<TextMeshProUGUI>().text = Data.plantStats[Data.seedTypes[plantIndex]].ConveyorStatsString;
+                                                tooltipObject.transform.Find("Description").GetComponent<TextMeshProUGUI>().text = PlantStatRando.plantStats[Data.seedTypes[plantIndex]].ConveyorStatsString;
                                             }
                                             else
                                             {
-                                                tooltipObject.transform.Find("Description").GetComponent<TextMeshProUGUI>().text = Data.plantStats[Data.seedTypes[plantIndex]].StatsString;
+                                                tooltipObject.transform.Find("Description").GetComponent<TextMeshProUGUI>().text = PlantStatRando.plantStats[Data.seedTypes[plantIndex]].StatsString;
                                             }
                                             tooltipObject.SetActive(true);
                                         }
@@ -498,6 +499,11 @@ namespace ReplantedArchipelago.Patches
                         {
                             ZenGard.AddRandomZenGardenPlant(__instance.m_zenGarden);
                         }
+                        else if (itemId == 17)
+                        {
+                            Profile.AddConsumablePurchase(__instance.m_userService, (int)StoreItem.Rake, 1);
+                            board.PlaceRake();
+                        }
                         else if (itemId == 71) //Seed Packet Cooldown Trap
                         {
                             if (board.HasConveyorBeltSeedBank() == false && __instance.GameMode != GameMode.ChallengeBeghouled && __instance.GameMode != GameMode.ChallengeBeghouledTwist) //Don't trigger if playing a conveyor belt level (causes weird issues)
@@ -515,6 +521,11 @@ namespace ReplantedArchipelago.Patches
                                             APClient.SendSeedLinkPacket(seedPacket.mPacketType);
                                         }
                                     }
+                                }
+                                if (ButterAbility.ButterAllowed())
+                                {
+                                    board.mPottedPlantsCollected = ButterAbility.butterCooldownLength;
+                                    ButterAbility.ToggleCustomButterObjects(true);
                                 }
                             }
                         }
@@ -629,6 +640,97 @@ namespace ReplantedArchipelago.Patches
                                 __instance.m_audioService.PlayFoley(FoleyType.LimbsPop);
                             }
                         }
+                        else if (itemId == 98) //Invisighoul Trap
+                        {
+                            for (int zombieIndex = 0; zombieIndex < board.m_zombies.Count; zombieIndex++)
+                            {
+                                if (board.m_zombies[zombieIndex].mZombieType != ZombieType.Boss)
+                                {
+                                    board.m_zombies[zombieIndex].mController.m_scale = new float2(0, 1);
+                                    board.m_zombies[zombieIndex].mController.m_shadowController.m_obj.mVisible = false;
+                                }
+                            }
+                            __instance.m_audioService.PlaySample(Il2CppReloaded.Constants.Sound.SOUND_MINDCONTROLLED);
+                        }
+                        else if (itemId == 99) //Randomised Seed Bank Trap
+                        {
+                            if (__instance.Board.ChooseSeedsOnCurrentLevel())
+                            {
+                                foreach (SeedPacket seedPacket in board.SeedBanks[0].SeedPackets)
+                                {
+                                    List<SeedType> alreadyChosenPackets = new List<SeedType>();
+                                    if (seedPacket != null && seedPacket.PacketType != SeedType.None)
+                                    {
+                                        seedPacket.mPacketType = Data.GetFreeSeedType(board, true);
+                                        while (alreadyChosenPackets.Contains(seedPacket.mPacketType))
+                                        {
+                                            seedPacket.mPacketType = Data.GetFreeSeedType(board, true);
+                                        }
+                                        alreadyChosenPackets.Add(seedPacket.mPacketType);
+
+                                        seedPacket.mRefreshCounter = 0;
+                                        seedPacket.mRefreshTime = Plant.GetRefreshTime(__instance, seedPacket.mPacketType, seedPacket.mImitaterType);
+                                        seedPacket.mRefreshing = true;
+                                        seedPacket.mActive = false;
+                                    }
+                                }
+                            }
+                        }
+                        else if (itemId == 2001) //Paranoia Trap
+                        {
+                            __instance.m_audioService.PlayFoley(FoleyType.JackInThebox);
+                            Task.Delay(UnityEngine.Random.Range(7000, 20000)).ContinueWith(t => __instance.m_audioService.StopFoley(FoleyType.JackInThebox));
+                        }
+                        else if (itemId == 2002) //Ladder Trap
+                        {
+                            if (!__instance.IsIZombieLevel())
+                            {
+                                for (int plantIndex = 0; plantIndex < board.m_plants.Count; plantIndex++)
+                                {
+                                    Plant plant = board.m_plants[plantIndex];
+                                    if (board.GetGridItemAt(GridItemType.Ladder, plant.mPlantCol, plant.mRow) == null)
+                                    {
+                                        board.AddALadder(plant.mPlantCol, plant.mRow);
+                                    }
+                                }
+                                __instance.m_audioService.PlaySample(Il2CppReloaded.Constants.Sound.SOUND_LADDER_ZOMBIE);
+                            }
+                        }
+                        else if (itemId == 2003) //Zombie Growth Serum Trap
+                        {
+                            if (__instance.GameMode != GameMode.ChallengeZombiquarium && !__instance.IsIZombieLevel())
+                            {
+                                for (int zombieIndex = 0; zombieIndex < board.m_zombies.Count; zombieIndex++)
+                                {
+                                    if (!dontGrowThese.Contains(board.m_zombies[zombieIndex].mZombieType))
+                                    {
+                                        if (board.m_zombies[zombieIndex].mScaleZombie == 1)
+                                        {
+                                            ZombieGrowingInformation zombieGrowingInformation = new ZombieGrowingInformation
+                                            {
+                                                dataID = board.m_zombies[zombieIndex].DataID,
+                                                defaultOffset = board.m_zombies[zombieIndex].mController.m_visualOffset,
+                                                defaultScale = 1,
+                                                targetScale = 1.5f,
+                                                duration = 30,
+                                            };
+                                            growingZombies.Add(zombieGrowingInformation);
+
+                                            board.m_zombies[zombieIndex].mBodyMaxHealth = board.m_zombies[zombieIndex].mBodyMaxHealth * 2;
+                                            board.m_zombies[zombieIndex].mBodyHealth = board.m_zombies[zombieIndex].mBodyHealth * 2;
+
+                                            board.m_zombies[zombieIndex].mHelmMaxHealth = board.m_zombies[zombieIndex].mHelmMaxHealth * 2;
+                                            board.m_zombies[zombieIndex].mHelmHealth = board.m_zombies[zombieIndex].mHelmHealth * 2;
+
+                                            board.m_zombies[zombieIndex].mShieldMaxHealth = board.m_zombies[zombieIndex].mShieldMaxHealth * 2;
+                                            board.m_zombies[zombieIndex].mShieldHealth = board.m_zombies[zombieIndex].mShieldHealth * 2;
+
+                                            __instance.m_audioService.PlayFoley(FoleyType.PlantGrow);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         else if (itemId == 50) //mustache
                         {
                             __instance.UserService.ActiveUserProfile.mMustacheModeActive = true;
@@ -704,6 +806,16 @@ namespace ReplantedArchipelago.Patches
                     board.ShowShovel = false;
                 }
 
+                //Update butter display
+                if (__instance.GameScene == GameScenes.Playing)
+                {
+                    GameObject butter = GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center/TopLeftLayout/ButterContainer/Butter");
+                    if (butter != null)
+                    {
+                        butter.SetActive(ButterAbility.ButterAllowed());
+                    }
+                }
+
                 if (APClient.lockIZombieZombies && __instance.IsIZombieLevel())
                 {
                     for (int i = board.SeedBanks[0].mSeedPackets.Count - 1; i >= 0; i--)
@@ -735,6 +847,47 @@ namespace ReplantedArchipelago.Patches
                 if (APClient.sunCapacityItems && __instance.mSunMoney[0].Amount + theAmount > APClient.maximumSunCapacity && !Data.ignoreLockedTileLevelIds.Contains(Data.GetLevelIdFromGameplayActivity(__instance.mApp)))
                 {
                     theAmount = APClient.maximumSunCapacity - __instance.mSunMoney[0].Amount;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Board), nameof(Board.Update))]
+        public static class BoardUpdatePatch
+        {
+            private static void Postfix(Board __instance)
+            {
+                if (ButterAbility.ButterAllowed())
+                {
+                    ButterAbility.UpdateButterCooldown(__instance);
+                }
+
+                if (growingZombies.Count > 0)
+                {
+                    List<ZombieGrowingInformation> stillGrowing = new List<ZombieGrowingInformation>();
+                    for (int growingIndex = 0; growingIndex < growingZombies.Count; growingIndex++)
+                    {
+                        for (int zombieIndex = 0; zombieIndex < __instance.m_zombies.Count; zombieIndex++)
+                        {
+                            if (__instance.m_zombies[zombieIndex].DataID == growingZombies[growingIndex].dataID)
+                            {
+                                growingZombies[growingIndex].progress += 1;
+                                float progress = growingZombies[growingIndex].progress / growingZombies[growingIndex].duration;
+                                if (progress >= 1)
+                                {
+                                    progress = 1;
+                                }
+                                else
+                                {
+                                    stillGrowing.Add(growingZombies[growingIndex]);
+                                }
+
+                                float targetScaleAddon = growingZombies[growingIndex].targetScale - growingZombies[growingIndex].defaultScale;
+                                __instance.m_zombies[zombieIndex].mScaleZombie = growingZombies[growingIndex].defaultScale + (progress * targetScaleAddon);
+                                __instance.m_zombies[zombieIndex].mController.m_visualOffset = growingZombies[growingIndex].defaultOffset + new Vector3(60 * progress, -190 * progress, 0);
+                            }
+                        }
+                    }
+                    growingZombies = stillGrowing;
                 }
             }
         }
@@ -1135,6 +1288,19 @@ namespace ReplantedArchipelago.Patches
                 MelonCoroutines.Start(InitLinkMessageObject());
 
                 Graphics.LoadCustomGraphics();
+
+                //Reset growing zombies list
+                growingZombies.Clear();
+
+                //Apply plant stats
+                if (__instance.Board.ChooseSeedsOnCurrentLevel() || APClient.conveyorMap.ContainsKey(currentLevelId.ToString()) || APClient.vasebreakerPlantMap.ContainsKey(currentLevelId.ToString()))
+                {
+                    PlantStatRando.ApplyPlantStats();
+                }
+                else
+                {
+                    Main.Log("Randomised plant stats do not apply to this level.");
+                }
             }
         }
 
@@ -1183,34 +1349,50 @@ namespace ReplantedArchipelago.Patches
         }
 
         [HarmonyPatch(typeof(Board), nameof(Board.GetNumSeedsInBank))]
-        public class NumSeedsInBankPatch
+        public class GetNumSeedsInBankPatch
         {
             private static bool Prefix(Board __instance, ref int __result)
             {
                 if (!__instance.mApp.IsCoopMode() && !__instance.mApp.IsVersusMode() && !__instance.mApp.IsIZombieLevel() && !__instance.mApp.IsScaryPotterLevel() && !__instance.mApp.IsWhackAZombieLevel() && !__instance.mApp.IsChallengeWithoutSeedBank() && !__instance.HasConveyorBeltSeedBank() && __instance.mApp.GameMode != GameMode.ChallengeBeghouled && __instance.mApp.GameMode != GameMode.ChallengeBeghouledTwist && __instance.mApp.GameMode != GameMode.ChallengeZombiquarium && __instance.mApp.GameMode != GameMode.ChallengeSlotMachine)
                 {
-                    long[] forcedPlants = Array.Empty<long>();
-                    long[] bannedPlants = Array.Empty<long>();
+                    List<SeedType> forcedPlants = new List<SeedType>();
 
                     if (__instance.mApp.GameMode == GameMode.ChallengeArtChallenge1)
                     {
-                        forcedPlants = new long[] { 103 };
+                        forcedPlants.Add(SeedType.Wallnut);
                     }
                     else if (__instance.mApp.GameMode == GameMode.ChallengeArtChallenge2)
                     {
-                        forcedPlants = new long[] { 103, 129, 137 };
+                        forcedPlants.Add(SeedType.Wallnut);
+                        forcedPlants.Add(SeedType.Umbrella);
+                        forcedPlants.Add(SeedType.Starfruit);
                     }
                     else if (__instance.mApp.GameMode == GameMode.ChallengeSeeingStars)
                     {
-                        forcedPlants = new long[] { 129 };
+                        forcedPlants.Add(SeedType.Starfruit);
                     }
-                    else if (__instance.mApp.GameMode == GameMode.ChallengeLastStand)
+
+                    List<SeedType> bannedPlants = new List<SeedType>();
+
+                    if (__instance.mApp.GameMode == GameMode.ChallengeLastStand)
                     {
-                        bannedPlants = new long[] { 101, 109, 141 };
+                        bannedPlants.Add(SeedType.Sunflower);
+                        bannedPlants.Add(SeedType.Twinsunflower);
+                        bannedPlants.Add(SeedType.Sunshroom);
                     }
                     else if (__instance.mApp.ReloadedGameMode == ReloadedGameMode.CloudyDay)
                     {
-                        bannedPlants = new long[] { 109, 141 };
+                        bannedPlants.Add(SeedType.Twinsunflower);
+                        bannedPlants.Add(SeedType.Sunshroom);
+                    }
+
+                    String levelId = GetLevelIdFromGameplayActivity(__instance.mApp).ToString();
+                    foreach (int plantIndex in APClient.plantBanlist[levelId.ToString()])
+                    {
+                        if (!bannedPlants.Contains(Data.seedTypes[plantIndex]))
+                        {
+                            bannedPlants.Add(Data.seedTypes[plantIndex]);
+                        }
                     }
 
                     __result = APClient.GetSeedSlots(forcedPlants, bannedPlants);
@@ -1249,19 +1431,6 @@ namespace ReplantedArchipelago.Patches
             }
         }
 
-        [HarmonyPatch(typeof(Board), nameof(Board.MouseDownButterUpZombie))]
-        public static class ButterPatch
-        {
-            private static bool Prefix(Board __instance)
-            {
-                if (!APClient.HasShovel())
-                {
-                    return false;
-                }
-                return true;
-            }
-        }
-
         [HarmonyPatch(typeof(CutScene), nameof(CutScene.ShowShovel))]
         public static class CutSceneShowShovelPatch
         {
@@ -1291,15 +1460,8 @@ namespace ReplantedArchipelago.Patches
         {
             private static void Postfix(GamepadCursorController __instance)
             {
-                if (__instance.m_canShovel && !APClient.HasShovel())
-                {
-                    __instance.m_canShovel = false;
-                }
-
-                if (__instance.m_canButter && !APClient.HasShovel())
-                {
-                    __instance.m_canButter = false;
-                }
+                __instance.m_canShovel = __instance.m_canShovel && APClient.HasShovel();
+                __instance.m_canButter = __instance.m_canButter && ButterAbility.CanButterRightNow(Main.cachedGameplayActivity.m_board);
             }
         }
 
@@ -1573,162 +1735,6 @@ namespace ReplantedArchipelago.Patches
             }
         }
 
-        [HarmonyPatch(typeof(GameplayActivity), nameof(GameplayActivity.CreateZombieController))]
-        public static class CreateZombieControllerPatch
-        {
-            private static void Prefix(ref ZombieType type, ref Zombie zombie, ref bool forceDecember)
-            {
-                if (APClient.costumeChances.Count > 0)
-                {
-                    List<string> possibleSkins = new List<string>();
-                    if (type == ZombieType.Normal)
-                    {
-                        if (APClient.costumeChances.ContainsKey("Zombie (China)") && Data.random.Next(10000) < (int)APClient.costumeChances["Zombie (China)"] && (!((zombie.mRow == 2 || zombie.mRow == 3) && (zombie.mBoard.mBackground == BackgroundType.Pool || zombie.mBoard.mBackground == BackgroundType.Fog))))
-                        {
-                            possibleSkins.Add("China");
-                        }
-                        if (APClient.costumeChances.ContainsKey("Zombie (Retro)") && Data.random.Next(10000) < (int)APClient.costumeChances["Zombie (Retro)"])
-                        {
-                            possibleSkins.Add("Retro");
-                        }
-                        if (APClient.costumeChances.ContainsKey("Zombie (Winter)") && Data.random.Next(10000) < (int)APClient.costumeChances["Zombie (Winter)"])
-                        {
-                            possibleSkins.Add("Winter");
-                        }
-                    }
-                    else if (type == ZombieType.TrafficCone)
-                    {
-                        if (APClient.costumeChances.ContainsKey("Conehead (China)") && Data.random.Next(10000) < (int)APClient.costumeChances["Conehead (China)"] && (!((zombie.mRow == 2 || zombie.mRow == 3) && (zombie.mBoard.mBackground == BackgroundType.Pool || zombie.mBoard.mBackground == BackgroundType.Fog))))
-                        {
-                            possibleSkins.Add("China");
-                        }
-                        if (APClient.costumeChances.ContainsKey("Conehead (Winter)") && Data.random.Next(10000) < (int)APClient.costumeChances["Conehead (Winter)"])
-                        {
-                            possibleSkins.Add("Winter");
-                        }
-                        if (APClient.costumeChances.ContainsKey("Conehead (Headcrab)") && Data.random.Next(10000) < (int)APClient.costumeChances["Conehead (Headcrab)"])
-                        {
-                            possibleSkins.Add("Platform");
-                        }
-                    }
-                    else if ((type == ZombieType.Flag && APClient.costumeChances.ContainsKey("Flag (China)") && (Data.random.Next(10000) < (int)APClient.costumeChances["Flag (China)"]) && (!((zombie.mRow == 2 || zombie.mRow == 3) && (zombie.mBoard.mBackground == BackgroundType.Pool || zombie.mBoard.mBackground == BackgroundType.Fog)))) ||
-                        (type == ZombieType.Pail && APClient.costumeChances.ContainsKey("Buckethead (China)") && (Data.random.Next(10000) < (int)APClient.costumeChances["Buckethead (China)"]) && (!((zombie.mRow == 2 || zombie.mRow == 3) && (zombie.mBoard.mBackground == BackgroundType.Pool || zombie.mBoard.mBackground == BackgroundType.Fog)))) ||
-                        (type == ZombieType.Polevaulter && APClient.costumeChances.ContainsKey("Polevaulter (China)") && (Data.random.Next(10000) < (int)APClient.costumeChances["Polevaulter (China)"])) ||
-                        (type == ZombieType.Football && APClient.costumeChances.ContainsKey("Football (China)") && (Data.random.Next(10000) < (int)APClient.costumeChances["Football (China)"])) ||
-                        (type == ZombieType.Bungee && APClient.costumeChances.ContainsKey("Bungee (China)") && (Data.random.Next(10000) < (int)APClient.costumeChances["Bungee (China)"])))
-                    {
-                        possibleSkins.Add("China");
-                    }
-
-                    if (possibleSkins.Count > 0)
-                    {
-                        string chosenSkin = possibleSkins[Data.random.Next(possibleSkins.Count)];
-                        if (chosenSkin == "China")
-                        {
-                            forceChina = true;
-                        }
-                        else if (chosenSkin == "Winter")
-                        {
-                            forceDecember = true;
-                        }
-                        else if (chosenSkin == "Retro")
-                        {
-                            forceRetro = true;
-                            zombie.mIsRetro = true;
-                        }
-                        else if (chosenSkin == "Platform")
-                        {
-                            forcePlatform = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(GameplayService), "get_ChinaModeActive")]
-        public static class ChinaModePatch
-        {
-            private static bool Prefix(GameplayService __instance, ref bool __result)
-            {
-                if (__instance.m_currentLevelData.m_gameArea != GameArea.China)
-                {
-                    __result = forceChina;
-                    forceChina = false;
-                    return false;
-                }
-                return true;
-            }
-        }
-
-        [HarmonyPatch(typeof(GameplayService), "get_RetroContentActive")]
-        public static class RetroContentPatch
-        {
-            private static bool Prefix(GameplayService __instance, ref bool __result)
-            {
-                __result = forceRetro;
-                forceRetro = false;
-                return false;
-            }
-        }
-
-        [HarmonyPatch(typeof(GameplayService), "get_PlatformContentActive")]
-        public static class PlatformContentPatch
-        {
-            private static bool Prefix(GameplayService __instance, ref bool __result)
-            {
-                __result = forcePlatform;
-                forceRetro = false;
-                return false;
-            }
-        }
-
-        [HarmonyPatch(typeof(GameplayActivity), nameof(GameplayActivity.CreatePlantController))]
-        public static class CreatePlantControllerPatch
-        {
-            private static void Prefix(GameplayActivity __instance, ref SeedType type, ref bool forceDecemberContent, ref bool forceRetroContent)
-            {
-                if (type == SeedType.Wallnut && APClient.costumeChances.ContainsKey("Wall-nut (Winter)") && Data.random.Next(10000) < (int)APClient.costumeChances["Wall-nut (Winter)"])
-                {
-                    forceDecemberContent = true;
-                }
-                else if (type == SeedType.Peashooter)
-                {
-                    bool selectedWinter = false;
-                    bool selectedRetro = false;
-
-                    if (APClient.costumeChances.ContainsKey("Peashooter (Winter)"))
-                    {
-                        selectedWinter = Data.random.Next(10000) < (int)APClient.costumeChances["Peashooter (Winter)"];
-                    }
-                    if (APClient.costumeChances.ContainsKey("Peashooter (Retro)"))
-                    {
-                        selectedRetro = Data.random.Next(10000) < (int)APClient.costumeChances["Peashooter (Retro)"];
-                    }
-
-                    if (selectedRetro)
-                    {
-                        Il2CppOOI.Platforms.Platform platform = UnityEngine.Object.FindObjectOfType<Il2CppOOI.Platforms.Platform>();
-                        selectedRetro = platform.HasPreOrder; //Can't use Retro Peashooter if you didn't pre-order
-                    }
-
-                    if (selectedWinter && selectedRetro)
-                    {
-                        selectedWinter = Data.random.Next(2) == 1;
-                        selectedRetro = !selectedWinter;
-                    }
-
-                    if (selectedWinter)
-                    {
-                        forceDecemberContent = true;
-                    }
-                    else if (selectedRetro)
-                    {
-                        forceRetroContent = true;
-                    }
-                }
-            }
-        }
-
         [HarmonyPatch(typeof(GameplayActivity), nameof(GameplayActivity.GetZombieDefinition))]
         public static class GetZombieDefinitionPatch
         {
@@ -1757,10 +1763,15 @@ namespace ReplantedArchipelago.Patches
                         else
                         {
                             __result.m_value = 1;
+                            __result.m_firstWave = 3;
                         }
                     }
+                    else if (theZombieType == ZombieType.Imp)
+                    {
+                        __result.m_value = 1;
+                    }
 
-                    if (APClient.zombieWeightRandomisation != 0)
+                    if (APClient.zombieWeightRandomisation != 0 && !Data.cantHard.Contains(levelId))
                     {
                         string zombieIndex = Array.FindIndex(Data.zombieTypes, zombieType => zombieType == theZombieType).ToString();
                         if (APClient.zombieWeightRandomisation == 1 && APClient.zombieWeightMap.ContainsKey(zombieIndex))
@@ -1775,9 +1786,14 @@ namespace ReplantedArchipelago.Patches
                             }
                         }
                     }
-                    else if (theZombieType == ZombieType.TrashCan && levelId != -1 && APClient.zombieMap.ContainsKey(levelId.ToString()) && APClient.zombieMap[levelId.ToString()].Any(includedZombie => includedZombie.Value<int>() == 35))
+                }
+
+                //Hard Mode
+                if (APClient.harderZombieSpawns)
+                {
+                    if (__result.m_firstWave > 1)
                     {
-                        __result.m_weight = 4000;
+                        __result.m_firstWave = 1;
                     }
                 }
             }
@@ -1827,7 +1843,13 @@ namespace ReplantedArchipelago.Patches
                         }
                     }
                 }
+                else if (APClient.harderZombieSpawns && !(Data.cantHard.Contains(GetLevelIdFromGameplayActivity(__instance.mApp))))
+                {
+                    __instance.mZombieCountDown = (int)(__instance.mZombieCountDown * 0.3);
+                }
                 receivedRingLinkAmount = 0;
+
+                ButterAbility.CreateButterUI();
             }
         }
 
@@ -1837,23 +1859,6 @@ namespace ReplantedArchipelago.Patches
             private static void Postfix(GameplayActivity __instance, ref PlantDefinition __result)
             {
                 SeedType theSeedType = __result.m_seedType;
-
-                //Stat randomisation
-                if (__result != null && APClient.sunPrices.Count > 0 && __instance.Board != null)
-                {
-                    int levelId = Data.GetLevelIdFromGameplayActivity(__instance);
-                    if (Data.plantStats.ContainsKey(theSeedType))
-                    {
-                        Data.PlantStats theStats = Data.plantStats[theSeedType].OldStats;
-                        if (__instance.Board.ChooseSeedsOnCurrentLevel() || APClient.conveyorMap.ContainsKey(levelId.ToString()))
-                        {
-                            theStats = Data.plantStats[theSeedType];
-                        }
-                        __result.m_seedCost = theStats.Cost;
-                        __result.m_refreshTime = theStats.Refresh;
-                        __result.m_launchRate = theStats.Rate;
-                    }
-                }
 
                 //Costumes
                 if (theSeedType == SeedType.Cabbagepult && APClient.costumeChances.ContainsKey("Cabbage-pult (PvZ2)"))
@@ -1877,67 +1882,6 @@ namespace ReplantedArchipelago.Patches
                     }
                 }
 
-            }
-        }
-
-        [HarmonyPatch(typeof(GameplayActivity), nameof(GameplayActivity.GetProjectileDefinition))]
-        public static class GetProjectileDefinitionPatch
-        {
-            private static void Postfix(GameplayActivity __instance, ref ProjectileDefinition __result)
-            {
-                if (__result != null && APClient.projectileDamages.Count > 0 && __instance.Board != null)
-                {
-                    ProjectileType theProjectileType = __result.m_projectileType;
-                    if (Data.projectileTypes.Contains(theProjectileType))
-                    {
-                        int levelId = Data.GetLevelIdFromGameplayActivity(__instance);
-                        if (__instance.Board.ChooseSeedsOnCurrentLevel() || APClient.conveyorMap.ContainsKey(levelId.ToString()))
-                        {
-                            string projectileIndex = Array.FindIndex(Data.projectileTypes, projectileType => projectileType == theProjectileType).ToString();
-                            if (APClient.projectileDamages.ContainsKey(projectileIndex))
-                            {
-                                __result.m_damage = (int)APClient.projectileDamages[projectileIndex];
-                            }
-                            else if (theProjectileType == ProjectileType.PeashooterPea && APClient.projectileDamages.ContainsKey("0"))
-                            {
-                                __result.m_damage = (int)APClient.projectileDamages["0"];
-                            }
-                            else if ((theProjectileType == ProjectileType.Fireball || theProjectileType == ProjectileType.PeashooterFireball) && APClient.projectileDamages.ContainsKey("0"))
-                            {
-                                __result.m_damage = ((int)APClient.projectileDamages["0"]) * 2;
-                            }
-                        }
-                        else if (Data.defaultProjectileDamages.ContainsKey(theProjectileType))
-                        {
-                            __result.m_damage = Data.defaultProjectileDamages[theProjectileType];
-                        }
-                    }
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(Plant), nameof(Plant.PlantInitialize))]
-        public static class PlantInitializePatch
-        {
-            private static void Postfix(Plant __instance)
-            {
-                if (APClient.plantHealths.Count > 0 && __instance.mBoard != null && __instance.mSeedType != null)
-                {
-                    int levelId = Data.GetLevelIdFromGameplayActivity(__instance.mApp);
-                    if (__instance.mBoard.ChooseSeedsOnCurrentLevel() || APClient.conveyorMap.ContainsKey(levelId.ToString()))
-                    {
-                        SeedType theSeedType = __instance.mSeedType;
-                        if (Data.plantStats.ContainsKey(theSeedType))
-                        {
-                            Data.PlantStats theStats = Data.plantStats[theSeedType];
-                            if (theStats.Health > 0)
-                            {
-                                __instance.mPlantMaxHealth = theStats.Health;
-                                __instance.mPlantHealth = theStats.Health;
-                            }
-                        }
-                    }
-                }
             }
         }
 
@@ -2296,7 +2240,7 @@ namespace ReplantedArchipelago.Patches
                 {
                     if (board.CanPlantAt(receivedLawnLink.Column, receivedLawnLink.Row, receivedLawnLink.Seed) == PlantingReason.Ok) //Add plant
                     {
-                        if (APClient.lawnLinkChances.ContainsKey("add_plant") && Data.random.Next(100) < (int)APClient.lawnLinkChances["add_plant"])
+                        if (APClient.lawnLinkChances.ContainsKey("add_plant") && Data.random.Next(100) <= (int)APClient.lawnLinkChances["add_plant"])
                         {
                             board.AddPlant(receivedLawnLink.Column, receivedLawnLink.Row, receivedLawnLink.Seed, receivedLawnLink.Seed);
                             DisplayLinkMessage($"{Plant.GetNameString(app, receivedLawnLink.Seed, receivedLawnLink.Seed)} planted by {APClient.apSession.Players.GetPlayerName(receivedLawnLink.Source)}", new UnityEngine.Color(1f, 1f, 0.3f), app);
@@ -2304,7 +2248,7 @@ namespace ReplantedArchipelago.Patches
                     }
                     else if (board.GetTopPlantAt(receivedLawnLink.Column, receivedLawnLink.Row, PlantPriority.DiggingOrder) != null && board.CanPlantAt(receivedLawnLink.Column, receivedLawnLink.Row, receivedLawnLink.Seed) == PlantingReason.NotHere) //Can't plant because there's already something there - so overwrite
                     {
-                        if (APClient.lawnLinkChances.ContainsKey("overwrite_plant") && Data.random.Next(100) < (int)APClient.lawnLinkChances["overwrite_plant"])
+                        if (APClient.lawnLinkChances.ContainsKey("overwrite_plant") && Data.random.Next(100) <= (int)APClient.lawnLinkChances["overwrite_plant"])
                         {
                             if (((receivedLawnLink.Seed == SeedType.Spikeweed || receivedLawnLink.Seed == SeedType.Spikerock) && (board.mBackground == BackgroundType.Roof || board.mBackground == BackgroundType.Boss)) || //No Spikeweed on the roof
                                 (receivedLawnLink.Seed == SeedType.Gravebuster) ||
@@ -2387,7 +2331,7 @@ namespace ReplantedArchipelago.Patches
                         }
                     }
                 }
-                else if (receivedLawnLink.Action == 1 && APClient.lawnLinkChances.ContainsKey("remove_plant") && Data.random.Next(100) < (int)APClient.lawnLinkChances["remove_plant"]) //Digging
+                else if (receivedLawnLink.Action == 1 && APClient.lawnLinkChances.ContainsKey("remove_plant") && Data.random.Next(100) <= (int)APClient.lawnLinkChances["remove_plant"]) //Digging
                 {
                     Plant plant = board.GetTopPlantAt(receivedLawnLink.Column, receivedLawnLink.Row, PlantPriority.EatingOrder);
                     if (plant != null)
@@ -2396,6 +2340,64 @@ namespace ReplantedArchipelago.Patches
                         DisplayLinkMessage($"{APClient.apSession.Players.GetPlayerName(receivedLawnLink.Source)} removed your {Plant.GetNameString(app, plant.mSeedType, plant.mImitaterType)}", new UnityEngine.Color(1f, 0.5f, 0.5f), app);
                     }
                 }
+            }
+        }
+
+        [HarmonyPatch(typeof(Board), nameof(Board.PutZombieInWave))]
+        public static class PutZombieInWavePatch
+        {
+            private static void Prefix(Board __instance, ref int theWaveNumber, ref Board.ZombiePicker theZombiePicker)
+            {
+                if (APClient.harderZombieSpawns && wavePointsAdjusted != theWaveNumber && !(Data.cantHard.Contains(GetLevelIdFromGameplayActivity(__instance.mApp))))
+                {
+                    if (__instance.mApp.ReloadedGameMode == ReloadedGameMode.CloudyDay)
+                    {
+                        theZombiePicker.ZombiePoints = (int)(theZombiePicker.ZombiePoints * 1.2);
+                    }
+                    else
+                    {
+                        theZombiePicker.ZombiePoints = (int)(theZombiePicker.ZombiePoints * 1.5);
+                    }
+                    wavePointsAdjusted = theWaveNumber;
+                }
+            }
+        }
+
+
+        [HarmonyPatch(typeof(SeedChooserScreen), nameof(SeedChooserScreen.SeedNotAllowedToPick))]
+        public static class SeedNotAllowedToPickPatch
+        {
+            private static bool Prefix(SeedChooserScreen __instance, ref SeedType theSeedType, ref bool __result)
+            {
+                if (APClient.HasSeedType(theSeedType) && APClient.plantBanlist.Count > 0)
+                {
+                    String levelId = GetLevelIdFromGameplayActivity(__instance.mApp).ToString();
+                    SeedType chosenSeedType = theSeedType;
+                    if (APClient.plantBanlist.ContainsKey(levelId))
+                    {
+                        int plantIndex = Array.FindIndex(Data.seedTypes, seedType => seedType == chosenSeedType);
+                        if (APClient.plantBanlist[levelId.ToString()].Any(bannedSeed => (int)bannedSeed == plantIndex))
+                        {
+                            __result = true;
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(GameplayActivity), nameof(GameplayActivity.IsFirstTimeAdventureMode))]
+        public static class IsFirstTimeAdventureModePatch
+        {
+            private static bool Prefix(GameplayActivity __instance, ref bool __result)
+            {
+                if (__instance.IsWallnutBowlingLevel() && __instance.GameScene == GameScenes.Playing)
+                {
+                    __result = false;
+                    return false;
+                }
+                return true;
             }
         }
     }

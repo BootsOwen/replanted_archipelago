@@ -14,23 +14,12 @@ namespace ReplantedArchipelago
     public class Data
     {
         //Version to match with generation
-        public static string GenVersion = "1.9";
+        public static string GenVersion = "1.10";
         //Whether cheat keys are enabled
-        public static bool CheatKeys = false;
+        public static bool CheatKeys = true;
         public static bool SkipAwardScreen = false;
 
         public static System.Random random = new System.Random();
-
-        //UI templates
-        public static GameObject buttonTemplate;
-        public static GameObject panelTemplate;
-        public static GameObject errorTemplate;
-        public static GameObject clientTemplate;
-        public static GameObject logTemplate;
-        public static GameObject inputTemplate;
-        public static GameObject subheaderTemplate;
-        public static GameObject headerTemplate;
-        public static GameObject messageTemplate;
 
         //Classes
         public class LevelLocationsEntry
@@ -85,7 +74,7 @@ namespace ReplantedArchipelago
             { "Imitater", 148 }
         };
 
-        public static double[] gameEffectItems = { 50, 51, 52, 53, 54, 55, 56, 64, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82 };
+        public static double[] gameEffectItems = { 17, 50, 51, 52, 53, 54, 55, 56, 64, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 98, 99, 2001, 2002, 2003 };
 
         public static Dictionary<long, string> itemIdDefaultTooltips = new Dictionary<long, string>
         {
@@ -110,6 +99,7 @@ namespace ReplantedArchipelago
             { 12, "Adds an extra line of defense for roof levels" },
             { 13, "Adds an extra line of defense on levels with a pool" },
             { 15, "More items are available in Crazy Dave's shop" },
+            { 17, "Takes out the first zombie that steps on it" },
             { 18, "Lets you start with more sun" },
             { 19, "Increases the reward received from lawn mowers" },
             { 20, "You can now play Adventure: Day" },
@@ -158,7 +148,12 @@ namespace ReplantedArchipelago
             { 94, "A zombie to use in I, Zombie" },
             { 95, "A zombie to use in I, Zombie" },
             { 96, "A zombie to use in I, Zombie" },
-            { 97, "A zombie to use in I, Zombie" }
+            { 97, "A zombie to use in I, Zombie" },
+            { 98, "Turns zombies invisible" },
+            { 99, "Randomises the seeds in your seed bank" },
+            { 2001, "Puts you on edge" },
+            { 2002, "Places ladders on your plants" },
+            { 2003, "Turns zombies big and scary" }
         };
 
         public static Dictionary<long, CoinType> awardCoinTypes = new Dictionary<long, CoinType>
@@ -219,88 +214,6 @@ namespace ReplantedArchipelago
             { SeedType.ZombieDancer, 97 }
         };
 
-        //Plant stats
-        public class PlantStats
-        {
-            public int Cost { get; set; }
-            public int Refresh { get; set; }
-            public int Rate { get; set; }
-            public int Health { get; set; }
-            public List<string> Projectiles { get; set; }
-            public int EasyUpgradeCost { get; set; }
-            public string StatsString { get; set; }
-            public string ConveyorStatsString { get; set; }
-            public PlantStats OldStats { get; private set; }
-            public void BackupStats() //Save old stats to restore during I, Zombie etc.
-            {
-                if (OldStats == null)
-                {
-                    OldStats = new PlantStats();
-                    OldStats.Cost = this.Cost;
-                    OldStats.Refresh = this.Refresh;
-                    OldStats.Rate = this.Rate;
-                    OldStats.Health = this.Health;
-                    if (Projectiles != null)
-                    {
-                        OldStats.Projectiles = new List<string>(Projectiles);
-                    }
-                    OldStats.EasyUpgradeCost = this.EasyUpgradeCost;
-                }
-            }
-        }
-
-        public static Dictionary<SeedType, PlantStats> plantStats = new Dictionary<SeedType, PlantStats>
-        {
-            [SeedType.Peashooter] = new PlantStats { Cost = 100, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Pea" } },
-            [SeedType.Sunflower] = new PlantStats { Cost = 50, Refresh = 750, Rate = 2500, Health = 300 },
-            [SeedType.Cherrybomb] = new PlantStats { Cost = 150, Refresh = 5000, Health = 300 },
-            [SeedType.Wallnut] = new PlantStats { Cost = 50, Refresh = 3000, Health = 4000 },
-            [SeedType.Potatomine] = new PlantStats { Cost = 25, Refresh = 3000, Health = 300 },
-            [SeedType.Snowpea] = new PlantStats { Cost = 175, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Frozen Pea" } },
-            [SeedType.Chomper] = new PlantStats { Cost = 150, Refresh = 750, Health = 300 },
-            [SeedType.Repeater] = new PlantStats { Cost = 200, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Pea" } },
-            [SeedType.Puffshroom] = new PlantStats { Cost = 0, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Spore" } },
-            [SeedType.Sunshroom] = new PlantStats { Cost = 25, Refresh = 750, Rate = 2500, Health = 300 },
-            [SeedType.Fumeshroom] = new PlantStats { Cost = 75, Refresh = 750, Rate = 150, Health = 300 },
-            [SeedType.Gravebuster] = new PlantStats { Cost = 75, Refresh = 750, Health = 300 },
-            [SeedType.Hypnoshroom] = new PlantStats { Cost = 75, Refresh = 3000, Health = 300 },
-            [SeedType.Scaredyshroom] = new PlantStats { Cost = 25, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Spore" } },
-            [SeedType.Iceshroom] = new PlantStats { Cost = 75, Refresh = 5000, Health = 300 },
-            [SeedType.Doomshroom] = new PlantStats { Cost = 125, Refresh = 5000, Health = 300 },
-            [SeedType.Lilypad] = new PlantStats { Cost = 25, Refresh = 750, Health = 300 },
-            [SeedType.Squash] = new PlantStats { Cost = 50, Refresh = 3000, Health = 300 },
-            [SeedType.Threepeater] = new PlantStats { Cost = 325, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Pea" } },
-            [SeedType.Tanglekelp] = new PlantStats { Cost = 25, Refresh = 3000, Health = 300 },
-            [SeedType.Jalapeno] = new PlantStats { Cost = 125, Refresh = 5000, Health = 300 },
-            [SeedType.Spikeweed] = new PlantStats { Cost = 100, Refresh = 750 },
-            [SeedType.Torchwood] = new PlantStats { Cost = 175, Refresh = 750, Health = 300 },
-            [SeedType.Tallnut] = new PlantStats { Cost = 125, Refresh = 3000, Health = 8000 },
-            [SeedType.Seashroom] = new PlantStats { Cost = 0, Refresh = 3000, Rate = 150, Health = 300, Projectiles = new List<string> { "Spore" } },
-            [SeedType.Plantern] = new PlantStats { Cost = 25, Refresh = 3000, Health = 300 },
-            [SeedType.Cactus] = new PlantStats { Cost = 125, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Spike" } },
-            [SeedType.Blover] = new PlantStats { Cost = 100, Refresh = 750, Health = 300 },
-            [SeedType.Splitpea] = new PlantStats { Cost = 125, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Pea" } },
-            [SeedType.Starfruit] = new PlantStats { Cost = 125, Refresh = 750, Rate = 150, Health = 300, Projectiles = new List<string> { "Star" } },
-            [SeedType.Pumpkinshell] = new PlantStats { Cost = 125, Refresh = 3000, Health = 4000 },
-            [SeedType.Magnetshroom] = new PlantStats { Cost = 100, Refresh = 750, Health = 300 },
-            [SeedType.Cabbagepult] = new PlantStats { Cost = 100, Refresh = 750, Rate = 300, Health = 300, Projectiles = new List<string> { "Cabbage" } },
-            [SeedType.Flowerpot] = new PlantStats { Cost = 25, Refresh = 750, Health = 300 },
-            [SeedType.Kernelpult] = new PlantStats { Cost = 100, Refresh = 750, Rate = 300, Health = 300, Projectiles = new List<string> { "Kernel", "Butter" } },
-            [SeedType.InstantCoffee] = new PlantStats { Cost = 75, Refresh = 750, Health = 300 },
-            [SeedType.Garlic] = new PlantStats { Cost = 50, Refresh = 750, Health = 400 },
-            [SeedType.Umbrella] = new PlantStats { Cost = 100, Refresh = 750, Health = 300 },
-            [SeedType.Marigold] = new PlantStats { Cost = 50, Refresh = 3000, Rate = 2500, Health = 300 },
-            [SeedType.Melonpult] = new PlantStats { Cost = 300, Refresh = 750, Rate = 300, Health = 300, Projectiles = new List<string> { "Melon" } },
-            [SeedType.Gatlingpea] = new PlantStats { Cost = 250, Refresh = 5000, Rate = 150, Health = 300, Projectiles = new List<string> { "Pea" }, EasyUpgradeCost = 450 },
-            [SeedType.Twinsunflower] = new PlantStats { Cost = 150, Refresh = 5000, Rate = 2500, Health = 300, EasyUpgradeCost = 200 },
-            [SeedType.Gloomshroom] = new PlantStats { Cost = 150, Refresh = 5000, Rate = 200, Health = 300, EasyUpgradeCost = 225 },
-            [SeedType.Cattail] = new PlantStats { Cost = 225, Refresh = 5000, Rate = 150, Health = 300, Projectiles = new List<string> { "Spike" }, EasyUpgradeCost = 250 },
-            [SeedType.Wintermelon] = new PlantStats { Cost = 200, Refresh = 5000, Rate = 300, Health = 300, Projectiles = new List<string> { "Frozen Melon" }, EasyUpgradeCost = 500 },
-            [SeedType.GoldMagnet] = new PlantStats { Cost = 50, Refresh = 5000, Health = 300, EasyUpgradeCost = 150 },
-            [SeedType.Spikerock] = new PlantStats { Cost = 125, Refresh = 5000, EasyUpgradeCost = 225 },
-            [SeedType.Cobcannon] = new PlantStats { Cost = 500, Refresh = 5000, Health = 300, EasyUpgradeCost = 700 }
-        };
-
         public static SeedType[] upgradePlants = { SeedType.Gatlingpea, SeedType.Twinsunflower, SeedType.Gloomshroom, SeedType.Cattail, SeedType.Wintermelon, SeedType.GoldMagnet, SeedType.Spikerock, SeedType.Cobcannon };
         public static SeedType[] aquaticPlants = { SeedType.Lilypad, SeedType.Tanglekelp, SeedType.Seashroom, SeedType.Cattail };
 
@@ -321,63 +234,7 @@ namespace ReplantedArchipelago
             ["Butter"] = ProjectileType.Butter
         };
 
-        public static Dictionary<ProjectileType, int> defaultProjectileDamages = new Dictionary<ProjectileType, int>
-        {
-            [ProjectileType.Pea] = 20,
-            [ProjectileType.Snowpea] = 20,
-            [ProjectileType.Cabbage] = 40,
-            [ProjectileType.Melon] = 80,
-            [ProjectileType.Puff] = 20,
-            [ProjectileType.Wintermelon] = 80,
-            [ProjectileType.Star] = 20,
-            [ProjectileType.Spike] = 20,
-            [ProjectileType.Kernel] = 20,
-            [ProjectileType.Butter] = 40,
-            [ProjectileType.Fireball] = 40,
-            [ProjectileType.PeashooterPea] = 20
-        };
-
-        public static Dictionary<ZombieType, AssetReferenceGameObject> zombiePrefabs = new Dictionary<ZombieType, AssetReferenceGameObject>();
         public static Dictionary<SeedType, AssetReferenceGameObject> plantPrefabs = new Dictionary<SeedType, AssetReferenceGameObject>();
-
-        public static string FormatPlantStatChanges(string label, double oldValue, double newValue, bool upIsGood)
-        {
-            double multiplier = newValue / oldValue;
-            if (label == "Rate")
-            {
-                multiplier = 1 / multiplier; //Invert the firing rate multiplier for clarity
-            }
-            if (oldValue == newValue)
-            {
-                return "";
-            }
-
-            string textColor = "<color=black>◌ ";
-            if (multiplier > 1)
-            {
-                if (upIsGood)
-                {
-                    textColor = "<color=#00B400>↑ ";
-                }
-                else
-                {
-                    textColor = "<color=#B40000>↑ ";
-                }
-            }
-            else if (multiplier < 1)
-            {
-                if (upIsGood)
-                {
-                    textColor = "<color=#B40000>↓ ";
-                }
-                else
-                {
-                    textColor = "<color=#00B400>↓ ";
-                }
-            }
-
-            return $"{textColor}{label} x{multiplier:F2}</color><br>";
-        }
 
         public static System.Collections.Generic.Dictionary<ZombieType, string> zombieTypeNames = new System.Collections.Generic.Dictionary<ZombieType, string>
         {
@@ -483,7 +340,7 @@ namespace ReplantedArchipelago
             { ZombieType.Ladder, 1000 },
             { ZombieType.Catapult, 1500 },
             { ZombieType.Gargantuar, 1500 },
-            { ZombieType.Imp, 0 },
+            { ZombieType.Imp, 3000 },
             { ZombieType.Boss, 0 },
             { ZombieType.PeaHead, 4000 },
             { ZombieType.WallnutHead, 3000 },
@@ -892,6 +749,7 @@ namespace ReplantedArchipelago
         };
 
         public static int[] ignoreLockedTileLevelIds = { -1, 5, 15, 35, 52, 53, 55, 57, 58, 59, 65, 68, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 99, 103 };
+        public static int[] cantHard = { 45, 54, 61, 62, 63, 66, 69, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 104 };
 
         //Base costs for store items
         public static Dictionary<ItemFlags, int> BaseCosts = new Dictionary<ItemFlags, int>
@@ -1163,5 +1021,17 @@ namespace ReplantedArchipelago
             public SeedType Seed { get; set; }
             public int Source { get; set; }
         }
+
+        public class ZombieGrowingInformation
+        {
+            public DataID dataID { get; set; }
+            public Vector3 defaultOffset { get; set; }
+            public float defaultScale { get; set; }
+            public float targetScale { get; set; }
+            public float duration { get; set; }
+            public float progress { get; set; }
+        }
+
+        public static ZombieType[] dontGrowThese = { ZombieType.Boss, ZombieType.Dancer, ZombieType.BackupDancer };
     }
 }

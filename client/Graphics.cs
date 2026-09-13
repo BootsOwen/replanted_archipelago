@@ -222,6 +222,13 @@ namespace ReplantedArchipelago
             { 77, "SPR_Scary_Pot_5" },
             { 78, "SPR_Scary_Pot_5" },
             { 80, "SPR_Scary_Pot_5" },
+            { 98, "SPR_Scary_Pot_5" },
+            { 99, "SPR_Scary_Pot_5" },
+            { 2001, "SPR_Scary_Pot_5" },
+            { 2002, "SPR_Scary_Pot_5" },
+            { 2003, "SPR_Scary_Pot_5" },
+
+            { 2004, "SPR_Butter" },
 
             { 82, "SPR_Almanac_Seedpackets_Explode-o-nut" },
             { 83, "SPR_Almanac_Seedpackets_GiantWallnut" },

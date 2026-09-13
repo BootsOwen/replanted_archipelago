@@ -90,6 +90,10 @@ namespace ReplantedArchipelago
         public static bool lockConveyorPlants;
         public static bool lockVasebreakerPlants;
         public static bool lockIZombieZombies;
+        public static bool harderZombieSpawns;
+        public static JObject plantBanlist;
+        public static JObject vasebreakerPlantMap;
+        public static JObject vasebreakerZombieMap;
 
         public static int shopPages;
         public static int shopPagesVisible = 0;
@@ -191,22 +195,21 @@ namespace ReplantedArchipelago
                     lockConveyorPlants = Convert.ToBoolean(slotData["lock_conveyor_plants"]);
                     lockVasebreakerPlants = Convert.ToBoolean(slotData["lock_vasebreaker_plants"]);
                     lockIZombieZombies = Convert.ToBoolean(slotData["lock_izombie_zombies"]);
-
+                    harderZombieSpawns = Convert.ToBoolean(slotData["harder_zombie_spawns"]);
+                    plantBanlist = (JObject)slotData["plant_banlist"];
+                    vasebreakerPlantMap = (JObject)slotData["vasebreaker_plants_map"];
+                    vasebreakerZombieMap = (JObject)slotData["vasebreaker_zombies_map"];
                     plantStatRandomisationEnabled = (firingRates.Count > 0 || rechargeTimes.Count > 0 || projectileDamages.Count > 0);
 
                     energyLinkEnabled = Convert.ToBoolean(slotData["energylink_enabled"]);
-                    if (energyLinkEnabled) //Set up energy link
+                    apSession.DataStorage[$"EnergyLink{APClient.apSession.Players.ActivePlayer.Team}"].Initialize(0);
+                    energyLinkBalance = apSession.DataStorage[$"EnergyLink{APClient.apSession.Players.ActivePlayer.Team}"];
+                    apSession.DataStorage[$"EnergyLink{APClient.apSession.Players.ActivePlayer.Team}"].OnValueChanged += (_, newBalance, none) =>
                     {
-                        apSession.DataStorage[$"EnergyLink{APClient.apSession.Players.ActivePlayer.Team}"].Initialize(0);
-                        energyLinkBalance = apSession.DataStorage[$"EnergyLink{APClient.apSession.Players.ActivePlayer.Team}"];
-                        apSession.DataStorage[$"EnergyLink{APClient.apSession.Players.ActivePlayer.Team}"].OnValueChanged += (_, newBalance, none) =>
                         {
-                            {
-                                energyLinkBalance = (long)newBalance;
-                            }
-                        };
-                        Menu.EnergyLinkButton.SetActive(true);
-                    }
+                            energyLinkBalance = (long)newBalance;
+                        }
+                    };
 
                     adventureProgression = Convert.ToInt32(slotData["adventure_mode_progression"]);
                     minigameLevels = Convert.ToInt32(slotData["minigame_levels"]);
@@ -234,99 +237,35 @@ namespace ReplantedArchipelago
                     Data.levelOrders["puzzle"] = GetOrderedLevelIDs(vasebreakerUnlocks, 9, 71).Concat(GetOrderedLevelIDs(izombieUnlocks, 9, 80)).ToArray();
                     Data.levelOrders["cloudy"] = GetOrderedLevelIDs(cloudyDayUnlocks, 12, 109);
 
-                    //Set up links
-                    if (deathLinkEnabled)
+                    //Option overrides
+                    apSession.DataStorage[Scope.Slot, "deathLinkEnabled"].Initialize(deathLinkEnabled);
+                    deathLinkEnabled = apSession.DataStorage[Scope.Slot, "deathLinkEnabled"];
+                    apSession.DataStorage[Scope.Slot, "ringLinkEnabled"].Initialize(ringLinkEnabled);
+                    ringLinkEnabled = apSession.DataStorage[Scope.Slot, "ringLinkEnabled"];
+                    apSession.DataStorage[Scope.Slot, "energyLinkEnabled"].Initialize(energyLinkEnabled);
+                    energyLinkEnabled = apSession.DataStorage[Scope.Slot, "energyLinkEnabled"];
+                    apSession.DataStorage[Scope.Slot, "seedLinkEnabled"].Initialize(seedLinkEnabled);
+                    seedLinkEnabled = apSession.DataStorage[Scope.Slot, "seedLinkEnabled"];
+                    apSession.DataStorage[Scope.Slot, "lawnLinkEnabled"].Initialize(lawnLinkEnabled);
+                    lawnLinkEnabled = apSession.DataStorage[Scope.Slot, "lawnLinkEnabled"];
+                    apSession.DataStorage[Scope.Slot, "harderZombieSpawns"].Initialize(harderZombieSpawns);
+                    harderZombieSpawns = apSession.DataStorage[Scope.Slot, "harderZombieSpawns"];
+                    apSession.DataStorage[Scope.Slot, "disableStormFlashes"].Initialize(disableStormFlashes);
+                    disableStormFlashes = apSession.DataStorage[Scope.Slot, "disableStormFlashes"];
+                    apSession.DataStorage[Scope.Slot, "imitaterOpen"].Initialize(imitaterOpen);
+                    imitaterOpen = apSession.DataStorage[Scope.Slot, "imitaterOpen"];
+
+                    if (energyLinkEnabled)
                     {
-                        Main.Log("Death Link enabled.");
-                        deathLinkService = apSession.CreateDeathLinkService();
-                        deathLinkService.OnDeathLinkReceived += HandleDeathLink;
-                        deathLinkService.EnableDeathLink();
+                        Menu.EnergyLinkButton.SetActive(true);
                     }
 
-                    if (ringLinkEnabled)
-                    {
-                        Main.Log("Ring Link enabled.");
-                        apSession.ConnectionInfo.UpdateConnectionOptions(apSession.ConnectionInfo.Tags.Append("RingLink").ToArray());
-                    }
+                    deathLinkService = apSession.CreateDeathLinkService();
+                    deathLinkService.OnDeathLinkReceived += HandleDeathLink;
+                    apSession.Socket.PacketReceived += HandlePacket;
 
-                    if (seedLinkEnabled)
-                    {
-                        Main.Log("Seed Link enabled.");
-                        apSession.ConnectionInfo.UpdateConnectionOptions(apSession.ConnectionInfo.Tags.Append("SeedLink").ToArray());
-                    }
-
-                    if (lawnLinkEnabled)
-                    {
-                        Main.Log("Lawn Link enabled.");
-                        apSession.ConnectionInfo.UpdateConnectionOptions(apSession.ConnectionInfo.Tags.Append("LawnLink").ToArray());
-                    }
-
-                    if (ringLinkEnabled || seedLinkEnabled || lawnLinkEnabled)
-                    {
-                        apSession.Socket.PacketReceived += HandlePacket;
-                    }
-
-                    //Set up plant stats
-                    foreach (var plant in plantStats)
-                    {
-                        SeedType theSeedType = plant.Key;
-                        PlantStats theStats = plant.Value;
-                        string plantIndex = Array.FindIndex(seedTypes, seedType => seedType == theSeedType).ToString();
-                        string nonConveyorStats = "";
-                        string otherStats = "";
-                        theStats.BackupStats();
-                        if (sunPrices.ContainsKey(plantIndex))
-                        {
-                            if (easyUpgradePlants && theStats.EasyUpgradeCost > theStats.Cost)
-                            {
-                                nonConveyorStats += Data.FormatPlantStatChanges("Cost", theStats.OldStats.EasyUpgradeCost, (double)sunPrices[plantIndex], false);
-                            }
-                            else
-                            {
-                                nonConveyorStats += Data.FormatPlantStatChanges("Cost", theStats.OldStats.Cost, (double)sunPrices[plantIndex], false);
-                            }
-                            theStats.Cost = (int)sunPrices[plantIndex];
-                        }
-                        if (rechargeTimes.ContainsKey(plantIndex))
-                        {
-                            nonConveyorStats += Data.FormatPlantStatChanges("Refresh", theStats.OldStats.Refresh, (double)rechargeTimes[plantIndex], false);
-                            theStats.Refresh = (int)rechargeTimes[plantIndex];
-                        }
-                        if (plantHealths.ContainsKey(plantIndex))
-                        {
-                            otherStats += Data.FormatPlantStatChanges("Toughness", theStats.OldStats.Health, (double)plantHealths[plantIndex], true);
-                            theStats.Health = (int)plantHealths[plantIndex];
-                        }
-                        if (firingRates.ContainsKey(plantIndex))
-                        {
-                            otherStats += Data.FormatPlantStatChanges("Rate", theStats.OldStats.Rate, (double)firingRates[plantIndex], true);
-                            theStats.Rate = (int)firingRates[plantIndex];
-                        }
-                        if (theStats.Projectiles != null)
-                        {
-                            foreach (string projectileName in theStats.Projectiles)
-                            {
-                                ProjectileType theProjectileType = projectileNamesToTypes[projectileName];
-                                int projectileDamage = defaultProjectileDamages[theProjectileType];
-                                string projectileIndex = Array.FindIndex(projectileTypes, projectileType => projectileType == theProjectileType).ToString();
-                                if (projectileDamages.ContainsKey(projectileIndex))
-                                {
-                                    string damageName = "Damage";
-                                    if (theStats.Projectiles.Count > 1)
-                                    {
-                                        damageName = $"{projectileName} Damage";
-                                    }
-                                    otherStats += FormatPlantStatChanges(damageName, projectileDamage, (double)projectileDamages[projectileIndex], true);
-                                }
-                            }
-                        }
-                        if (nonConveyorStats == "" && otherStats == "")
-                        {
-                            otherStats = "◌ No Changes";
-                        }
-                        theStats.StatsString = nonConveyorStats + otherStats;
-                        theStats.ConveyorStatsString = otherStats;
-                    }
+                    UpdateTags();
+                    PlantStatRando.SetupPlantStats();
 
                     currentlyConnected = true; //Connection successful!
 
@@ -399,7 +338,7 @@ namespace ReplantedArchipelago
             Main.Log($"Processing Item: #{item.ItemId} (Received {receivedItems.Count}) (Displayed {displayedIngameMessages})");
             if (displayedIngameMessages <= receivedItems.Count)
             {
-                if (!item.Player.Name.Equals(slot))
+                if (!item.Player.Name.Equals(slot) && item.ItemId != 2001)
                 {
                     string messageLabel = $"Received <color={itemColors[GetPrimaryItemClassification(item.Flags)]}>{item.ItemDisplayName}</color> from <color=#EE00EE>{item.Player.Name}</color>";
                     Main.QueuedIngameMessages.Enqueue(new Data.QueuedIngameMessage { MessageLabel = messageLabel, ItemId = item.ItemId, WasReceived = true });
@@ -431,16 +370,26 @@ namespace ReplantedArchipelago
                     queuedUpItemEffects.Add(item.ItemId);
                 }
 
-                if (Main.currentScene == "Gameplay" && item.ItemId > 1000 && item.ItemId < 2000) //Tile unlocks
+                if (Main.currentScene == "Gameplay")
                 {
-                    long value = item.ItemId - 1000;
-                    long row = value / 10;
-                    long column = value % 10;
-
-                    GameObject lockedTile = GameObject.Find($"LockedTile_{row}_{column}");
-                    if (lockedTile != null && lockedTile.activeSelf)
+                    if (item.ItemId > 1000 && item.ItemId < 2000) //Tile unlocks
                     {
-                        lockedTile.SetActive(false);
+                        long value = item.ItemId - 1000;
+                        long row = value / 10;
+                        long column = value % 10;
+
+                        GameObject lockedTile = GameObject.Find($"LockedTile_{row}_{column}");
+                        if (lockedTile != null && lockedTile.activeSelf)
+                        {
+                            lockedTile.SetActive(false);
+                        }
+                    }
+                    else if (item.ItemId == 2004) //Butter ability
+                    {
+                        if (ButterAbility.ButterAllowed())
+                        {
+                            ButterAbility.butter.SetActive(true);
+                        }
                     }
                 }
 
@@ -509,14 +458,17 @@ namespace ReplantedArchipelago
 
         public static void HandleDeathLink(DeathLink deathLink)
         {
-            Main.Log("Deathlink received.");
-            if (Main.currentScene == "Gameplay" && Main.cachedGameplayActivity != null && Main.cachedGameplayActivity.GameScene == GameScenes.Playing)
+            if (deathLinkEnabled)
             {
-                receivedDeathLink = deathLink;
-            }
-            else
-            {
-                Main.Log("Deathlink dodged!");
+                Main.Log("Deathlink received.");
+                if (Main.currentScene == "Gameplay" && Main.cachedGameplayActivity != null && Main.cachedGameplayActivity.GameScene == GameScenes.Playing)
+                {
+                    receivedDeathLink = deathLink;
+                }
+                else
+                {
+                    Main.Log("Deathlink dodged!");
+                }
             }
         }
 
@@ -524,7 +476,7 @@ namespace ReplantedArchipelago
         {
             try
             {
-                Main.Log("Packet received");
+                Main.Log("Packet received.");
                 if (packet.PacketType == ArchipelagoPacketType.Bounced)
                 {
                     BouncedPacket bouncedPacket = (BouncedPacket)packet;
@@ -580,7 +532,7 @@ namespace ReplantedArchipelago
             {
                 if (scoutedLocations != null && scoutedLocations.ContainsKey(locationId)) //If the location has been scouted, queue an ingame message
                 {
-                    if (queueMessage)
+                    if (queueMessage && scoutedLocations[locationId].ItemId != 2001)
                     {
                         if (scoutedLocations[locationId].Player.Name.Equals(slot) == false)
                         {
@@ -627,10 +579,10 @@ namespace ReplantedArchipelago
             return false;
         }
 
-        public static int GetSeedSlots(long[] extraPlants, long[] bannedPlants)
+        public static int GetSeedSlots(List<SeedType> forcedPlants, List<SeedType> bannedPlants)
         {
             int numberOfSlots = Math.Min(receivedItems.Count(item => item == Data.itemIds["Extra Seed Slot"]) + 1, 10);
-            int numberOfPlants = GetHowManyPlants(extraPlants, bannedPlants);
+            int numberOfPlants = GetHowManyPlants(forcedPlants, bannedPlants);
 
             return Math.Min(numberOfPlants, numberOfSlots);
         }
@@ -772,9 +724,9 @@ namespace ReplantedArchipelago
             return false; //Level not playable
         }
 
-        public static int GetHowManyPlants(long[] extraPlants, long[] bannedPlants)
+        public static int GetHowManyPlants(List<SeedType> forcedPlants, List<SeedType> bannedPlants)
         {
-            return receivedItems.Where(item => item >= 100 && item < 200).Union(extraPlants).Except(bannedPlants).Distinct().Count();
+            return Data.seedTypes.Where((plant, index) => !bannedPlants.Contains(plant) && (receivedItems.Contains(index + 100) || forcedPlants.Contains(plant))).Count();
         }
 
         public static ItemFlags GetPrimaryItemClassification(ItemFlags Flags)
@@ -934,6 +886,14 @@ namespace ReplantedArchipelago
             };
             Main.Log($"Sending Lawn Link: {lawnLink.Action} {lawnLink.Row} {lawnLink.Column} {lawnLink.Seed} {lawnLink.Conveyor}");
             apSession.Socket.SendPacketAsync(lawnLinkPacket);
+        }
+
+        public static void UpdateTags()
+        {
+            bool[] enabled = { deathLinkEnabled, ringLinkEnabled, seedLinkEnabled, lawnLinkEnabled };
+            string[] tags = { "DeathLink", "RingLink", "SeedLink", "LawnLink" };
+
+            apSession.ConnectionInfo.UpdateConnectionOptions(tags.Where((tag, i) => enabled[i]).ToArray());
         }
     }
 }

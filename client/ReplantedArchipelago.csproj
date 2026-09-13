@@ -482,6 +482,10 @@
     <Compile Include="Data.cs" />
     <Compile Include="Main.cs" />
     <Compile Include="Patches\AwardScreen.cs" />
+    <Compile Include="Patches\PlantStatRando.cs" />
+    <Compile Include="Patches\ZombieCostumes.cs" />
+    <Compile Include="Patches\ButterAbility.cs" />
+    <Compile Include="Patches\Vasebreaker.cs" />
     <Compile Include="Patches\Gameplay.cs" />
     <Compile Include="Patches\LevelEntry.cs" />
     <Compile Include="Patches\Menu.cs" />

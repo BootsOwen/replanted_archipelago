@@ -16,6 +16,7 @@ using Il2CppUI.Scripts;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Linq;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -39,6 +40,21 @@ namespace ReplantedArchipelago.Patches
         public static bool refreshRequired = false;
         public static bool displayedBossPopup = false;
         public static GameObject EnergyLinkButton;
+        public static GameObject SettingsPanel;
+        public static bool optionsVisible = false;
+
+        //UI templates
+        public static GameObject buttonTemplate;
+        public static GameObject panelTemplate;
+        public static GameObject errorTemplate;
+        public static GameObject clientTemplate;
+        public static GameObject logTemplate;
+        public static GameObject inputTemplate;
+        public static GameObject subheaderTemplate;
+        public static GameObject headerTemplate;
+        public static GameObject messageTemplate;
+        public static GameObject checkBoxTemplate;
+        public static GameObject sliderTemplate;
 
         public static GameObject RemoveUnwantedComponents(GameObject gameObject, bool aggressive)
         {
@@ -92,21 +108,21 @@ namespace ReplantedArchipelago.Patches
                     achievementsPot.SetActive(false);
                 }
 
-                Data.panelTemplate = __instance.transform.parent.Find("P_UsersPanel_Rename").gameObject;
-                Data.errorTemplate = RemoveUnwantedComponents(__instance.transform.parent.Find("P_UsersPanel_InvalidName").gameObject, false);
-                Data.clientTemplate = __instance.transform.parent.Find("P_UsersPanel").gameObject;
-                Data.inputTemplate = __instance.transform.parent.Find("P_UsersPanel_Rename/Canvas/Layout/Center/Rename/NameInputField").gameObject;
-                Data.logTemplate = __instance.transform.parent.Find("P_UsersPanel/Canvas/Layout/Center/Main/InsetWindow/P_UsersPanel_UserEntry").gameObject;
-                Data.buttonTemplate = RemoveUnwantedComponents(__instance.transform.parent.Find("P_UsersPanel/Canvas/Layout/Center/Main/Buttons/P_BacicButton_Rename").gameObject, false);
-                Data.subheaderTemplate = RemoveUnwantedComponents(__instance.transform.parent.Find("P_UsersPanel_InvalidName/Canvas/Layout/Center/NameConflict/SubheadingText").gameObject, false);
-                Data.headerTemplate = RemoveUnwantedComponents(__instance.transform.parent.Find("P_UsersPanel_InvalidName/Canvas/Layout/Center/NameConflict/HeaderText").gameObject, false);
+                panelTemplate = __instance.transform.parent.Find("P_UsersPanel_Rename").gameObject;
+                errorTemplate = RemoveUnwantedComponents(__instance.transform.parent.Find("P_UsersPanel_InvalidName").gameObject, false);
+                clientTemplate = __instance.transform.parent.Find("P_UsersPanel").gameObject;
+                inputTemplate = __instance.transform.parent.Find("P_UsersPanel_Rename/Canvas/Layout/Center/Rename/NameInputField").gameObject;
+                logTemplate = __instance.transform.parent.Find("P_UsersPanel/Canvas/Layout/Center/Main/InsetWindow/P_UsersPanel_UserEntry").gameObject;
+                buttonTemplate = RemoveUnwantedComponents(__instance.transform.parent.Find("P_UsersPanel/Canvas/Layout/Center/Main/Buttons/P_BacicButton_Rename").gameObject, false);
+                subheaderTemplate = RemoveUnwantedComponents(__instance.transform.parent.Find("P_UsersPanel_InvalidName/Canvas/Layout/Center/NameConflict/SubheadingText").gameObject, false);
+                headerTemplate = RemoveUnwantedComponents(__instance.transform.parent.Find("P_UsersPanel_InvalidName/Canvas/Layout/Center/NameConflict/HeaderText").gameObject, false);
 
-                GameObject apSettingsButton = CreateButton("Text Client", __instance.transform.Find("Canvas/Layout/Center/Main/Menu"), ShowClientPanel);
-                RectTransform apSettingsRect = apSettingsButton.GetComponent<RectTransform>();
-                apSettingsRect.anchorMin = new Vector2(0, 1);
-                apSettingsRect.anchorMax = new Vector2(0, 1);
-                apSettingsRect.pivot = new Vector2(0, 1);
-                apSettingsRect.anchoredPosition = new Vector2(310, -20);
+                GameObject apClientButton = CreateButton("Text Client", __instance.transform.Find("Canvas/Layout/Center/Main/Menu"), ShowClientPanel);
+                RectTransform apClientRect = apClientButton.GetComponent<RectTransform>();
+                apClientRect.anchorMin = new Vector2(0, 1);
+                apClientRect.anchorMax = new Vector2(0, 1);
+                apClientRect.pivot = new Vector2(0, 1);
+                apClientRect.anchoredPosition = new Vector2(310, -20);
 
                 GameObject apGoalButton = CreateButton("View Goal", __instance.transform.Find("Canvas/Layout/Center/Main/Menu"), ShowGoalPanel);
                 RectTransform apGoalRect = apGoalButton.GetComponent<RectTransform>();
@@ -136,6 +152,11 @@ namespace ReplantedArchipelago.Patches
                 Main.Log("Main Menu Panel View modified.");
                 menuLoaded = true;
                 refreshRequired = true;
+
+                if (APClient.currentlyConnected)
+                {
+                    PlantStatRando.ResetPlantStats();
+                }
             }
         }
 
@@ -195,13 +216,33 @@ namespace ReplantedArchipelago.Patches
                     }
 
                     APClient.chooserRefreshState = "none"; //No need to refresh seed chooser
+
+                    GameObject options = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel");
+                    bool optionsCurrentlyVisible = false;
+                    if (options != null)
+                    {
+                        optionsCurrentlyVisible = options.activeSelf;
+                    }
+                    if (optionsVisible != optionsCurrentlyVisible)
+                    {
+                        if (optionsCurrentlyVisible)
+                        {
+                            AddAPOptionsButton();
+                            SetupAPOptionsButtons();
+                        }
+                        optionsVisible = optionsCurrentlyVisible;
+                    }
+                    if (optionsCurrentlyVisible)
+                    {
+                        UpdateAPOptionToggles();
+                    }
                 }
             }
         }
 
         public static void ShowConnectionPanel()
         {
-            ConnectionPanel = GameObject.Instantiate(Data.panelTemplate, Data.panelTemplate.transform.parent);
+            ConnectionPanel = GameObject.Instantiate(panelTemplate, panelTemplate.transform.parent);
             ConnectionPanel.name = "ConnectionPanel";
             ConnectionPanel.SetActive(true);
 
@@ -213,7 +254,7 @@ namespace ReplantedArchipelago.Patches
             GameObject originalSubheader = RemoveUnwantedComponents(center.Find("SubheadingText").gameObject, true);
             GameObject originalInput = center.Find("NameInputField").gameObject;
 
-            hostInput = GameObject.Instantiate(Data.inputTemplate, center);
+            hostInput = GameObject.Instantiate(inputTemplate, center);
             hostInput.name = "hostInput";
             hostInput.GetComponent<TMP_InputField>().onValueChanged = new TMP_InputField.OnChangeEvent();
             hostInput.GetComponent<TMP_InputField>().text = Main.defaultHost;
@@ -223,7 +264,7 @@ namespace ReplantedArchipelago.Patches
             slotHeader.name = "slotHeader";
             slotHeader.GetComponent<TextMeshProUGUI>().text = "Slot Name:";
 
-            slotInput = GameObject.Instantiate(Data.inputTemplate, center);
+            slotInput = GameObject.Instantiate(inputTemplate, center);
             slotInput.name = "slotInput";
             slotInput.GetComponent<TMP_InputField>().onValueChanged = new TMP_InputField.OnChangeEvent();
             slotInput.GetComponent<TMP_InputField>().text = Main.defaultSlot;
@@ -233,7 +274,7 @@ namespace ReplantedArchipelago.Patches
             passwordHeader.name = "passwordHeader";
             passwordHeader.GetComponent<TextMeshProUGUI>().text = "Password:";
 
-            passwordInput = GameObject.Instantiate(Data.inputTemplate, center);
+            passwordInput = GameObject.Instantiate(inputTemplate, center);
             passwordInput.name = "passwordInput";
             passwordInput.GetComponent<TMP_InputField>().onValueChanged = new TMP_InputField.OnChangeEvent();
             passwordInput.GetComponent<TMP_InputField>().text = Main.defaultPassword;
@@ -342,7 +383,7 @@ namespace ReplantedArchipelago.Patches
 
         public static void ShowErrorPanel(string header, string text)
         {
-            ErrorPanel = GameObject.Instantiate(Data.errorTemplate, Data.errorTemplate.transform.parent);
+            ErrorPanel = GameObject.Instantiate(errorTemplate, errorTemplate.transform.parent);
             ErrorPanel.name = "ErrorPanel";
             ErrorPanel.SetActive(true);
 
@@ -384,7 +425,7 @@ namespace ReplantedArchipelago.Patches
             }
             else
             {
-                ClientPanel = GameObject.Instantiate(Data.clientTemplate, Data.clientTemplate.transform.parent);
+                ClientPanel = GameObject.Instantiate(clientTemplate, clientTemplate.transform.parent);
                 ClientPanel.name = "ClientPanel";
                 ClientPanel.SetActive(true);
 
@@ -439,7 +480,7 @@ namespace ReplantedArchipelago.Patches
                 GameObject.DestroyImmediate(main.Find("Buttons").gameObject);
 
                 //Add text input
-                messageInput = GameObject.Instantiate(Data.inputTemplate, main);
+                messageInput = GameObject.Instantiate(inputTemplate, main);
                 messageInput.name = "MessageInput";
                 messageInput.SetActive(true);
                 messageInput.GetComponent<TMP_InputField>().onValueChanged = new TMP_InputField.OnChangeEvent();
@@ -491,7 +532,7 @@ namespace ReplantedArchipelago.Patches
             }
             else
             {
-                EnergyLinkPanel = GameObject.Instantiate(Data.clientTemplate, Data.clientTemplate.transform.parent);
+                EnergyLinkPanel = GameObject.Instantiate(clientTemplate, clientTemplate.transform.parent);
                 EnergyLinkPanel.name = "EnergyLinkPanel";
                 EnergyLinkPanel.SetActive(true);
 
@@ -504,7 +545,7 @@ namespace ReplantedArchipelago.Patches
                 GameObject.DestroyImmediate(main.Find("Buttons").gameObject);
 
                 //Add number input
-                EnergyAmountInput = GameObject.Instantiate(Data.inputTemplate, main);
+                EnergyAmountInput = GameObject.Instantiate(inputTemplate, main);
                 EnergyAmountInput.name = "EnergyAmountInput";
                 EnergyAmountInput.SetActive(true);
                 EnergyAmountInput.GetComponent<TMP_InputField>().characterLimit = 6;
@@ -645,13 +686,171 @@ namespace ReplantedArchipelago.Patches
             messageInput.GetComponent<TMP_InputField>().text = "";
         }
 
+        public static void AddAPOptionsButton()
+        {
+            GameObject apOptionsButton = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/NormalOptions/ApOptions");
+            if (apOptionsButton != null)
+            {
+                HideAPOptions();
+                Main.Log("AP Options button already exists!");
+            }
+            else
+            {
+                Main.Log("Adding custom AP options button.");
+                GameObject legalButton = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/NormalOptions/Legal");
+                if (legalButton != null)
+                {
+                    apOptionsButton = GameObject.Instantiate(legalButton, legalButton.transform.parent);
+                    apOptionsButton.transform.SetAsFirstSibling();
+                    apOptionsButton.transform.Find("P_BasicButton_Legal/ButtonText").GetComponent<TextMeshProUGUI>().text = "AP Options";
+                    RemoveUnwantedComponents(apOptionsButton, false);
+                    apOptionsButton.SetName("ApOptions");
+                }
+            }
+        }
+
+        public static void SetupAPOptionsButtons()
+        {
+            GameObject apOptionsButton = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/NormalOptions/ApOptions");
+            if (apOptionsButton != null)
+            {
+                Button buttonComponent = apOptionsButton.transform.Find("P_BasicButton_Legal").GetComponent<Button>();
+                buttonComponent.onClick.RemoveAllListeners();
+                buttonComponent.onClick.AddListener(new Action(ShowAPOptions));
+            }
+
+            GameObject backButton = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/ApOptions/ButtonContainer");
+            if (backButton != null)
+            {
+                Button buttonComponent = backButton.transform.Find("P_BasicButton_Close").GetComponent<Button>();
+                buttonComponent.onClick.RemoveAllListeners();
+                buttonComponent.onClick.AddListener(new Action(HideAPOptions));
+            }
+
+            Main.Log("Modified option buttons.");
+        }
+
+        public static void ShowAPOptions()
+        {
+            GameObject normalOptions = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/NormalOptions");
+            normalOptions.SetActive(false);
+
+            checkBoxTemplate = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/EffectOptions/Future");
+
+            GameObject effectOptions = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/EffectOptions");
+            GameObject apOptions = GameObject.Instantiate(effectOptions, effectOptions.transform.parent);
+            apOptions.SetName("ApOptions");
+            apOptions.SetActive(true);
+
+            //Remove old options
+            for (int childIndex = apOptions.transform.childCount - 1; childIndex >= 0; childIndex--)
+            {
+                Transform child = apOptions.transform.GetChild(childIndex);
+                if (child.name != "Spacer (1)" && child.name != "ButtonContainer")
+                {
+                    GameObject.Destroy(child.gameObject);
+                }
+            }
+
+            CreateCheckbox("Open Imitater", APClient.imitaterOpen, apOptions.transform);
+            CreateCheckbox("Disable Storm Flashes", APClient.disableStormFlashes, apOptions.transform);
+            CreateCheckbox("Harder Zombie Spawns", APClient.harderZombieSpawns, apOptions.transform);
+            CreateCheckbox("Lawn Link", APClient.lawnLinkEnabled, apOptions.transform);
+            CreateCheckbox("Seed Link", APClient.seedLinkEnabled, apOptions.transform);
+            CreateCheckbox("Energy Link", APClient.energyLinkEnabled, apOptions.transform);
+            CreateCheckbox("Ring Link", APClient.ringLinkEnabled, apOptions.transform);
+            CreateCheckbox("Death Link", APClient.deathLinkEnabled, apOptions.transform);
+
+            Main.Log("Created custom AP options.");
+
+            SetupAPOptionsButtons();
+        }
+
+        public static void UpdateAPOptionToggles()
+        {
+            if (GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/ApOptions") != null)
+            {
+                bool imitaterOpen = GameObject.Find("Open Imitater Toggle").GetComponentInChildren<Toggle>().isOn;
+                if (imitaterOpen != APClient.imitaterOpen)
+                {
+                    APClient.apSession.DataStorage[Archipelago.MultiClient.Net.Enums.Scope.Slot, "imitaterOpen"] = imitaterOpen;
+                    APClient.imitaterOpen = imitaterOpen;
+                }
+
+                bool disableStormFlashes = GameObject.Find("Disable Storm Flashes Toggle").GetComponentInChildren<Toggle>().isOn;
+                if (disableStormFlashes != APClient.disableStormFlashes)
+                {
+                    APClient.apSession.DataStorage[Archipelago.MultiClient.Net.Enums.Scope.Slot, "disableStormFlashes"] = disableStormFlashes;
+                    APClient.disableStormFlashes = disableStormFlashes;
+                }
+
+                bool harderZombieSpawns = GameObject.Find("Harder Zombie Spawns Toggle").GetComponentInChildren<Toggle>().isOn;
+                if (harderZombieSpawns != APClient.harderZombieSpawns)
+                {
+                    APClient.apSession.DataStorage[Archipelago.MultiClient.Net.Enums.Scope.Slot, "harderZombieSpawns"] = harderZombieSpawns;
+                    APClient.harderZombieSpawns = harderZombieSpawns;
+                }
+
+                bool lawnLink = GameObject.Find("Lawn Link Toggle").GetComponentInChildren<Toggle>().isOn;
+                if (lawnLink != APClient.lawnLinkEnabled)
+                {
+                    APClient.apSession.DataStorage[Archipelago.MultiClient.Net.Enums.Scope.Slot, "lawnLinkEnabled"] = lawnLink;
+                    APClient.lawnLinkEnabled = lawnLink;
+                    APClient.UpdateTags();
+                }
+
+                bool seedLink = GameObject.Find("Seed Link Toggle").GetComponentInChildren<Toggle>().isOn;
+                if (seedLink != APClient.seedLinkEnabled)
+                {
+                    APClient.apSession.DataStorage[Archipelago.MultiClient.Net.Enums.Scope.Slot, "seedLinkEnabled"] = seedLink;
+                    APClient.seedLinkEnabled = seedLink;
+                    APClient.UpdateTags();
+                }
+
+                bool energyLink = GameObject.Find("Energy Link Toggle").GetComponentInChildren<Toggle>().isOn;
+                if (energyLink != APClient.energyLinkEnabled)
+                {
+                    APClient.apSession.DataStorage[Archipelago.MultiClient.Net.Enums.Scope.Slot, "energyLinkEnabled"] = energyLink;
+                    APClient.energyLinkEnabled = energyLink;
+                    EnergyLinkButton.SetActive(APClient.energyLinkEnabled);
+                }
+
+                bool ringLink = GameObject.Find("Ring Link Toggle").GetComponentInChildren<Toggle>().isOn;
+                if (ringLink != APClient.ringLinkEnabled)
+                {
+                    APClient.apSession.DataStorage[Archipelago.MultiClient.Net.Enums.Scope.Slot, "ringLinkEnabled"] = ringLink;
+                    APClient.ringLinkEnabled = ringLink;
+                    APClient.UpdateTags();
+                }
+
+                bool deathLink = GameObject.Find("Death Link Toggle").GetComponentInChildren<Toggle>().isOn;
+                if (deathLink != APClient.deathLinkEnabled)
+                {
+                    APClient.apSession.DataStorage[Archipelago.MultiClient.Net.Enums.Scope.Slot, "deathLinkEnabled"] = deathLink;
+                    APClient.deathLinkEnabled = deathLink;
+                    APClient.UpdateTags();
+                }
+            }
+        }
+
+        public static void HideAPOptions()
+        {
+            GameObject normalOptions = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/NormalOptions");
+            normalOptions.SetActive(true);
+
+            GameObject apOptions = GameObject.Find("GlobalPanels(Clone)/P_OptionsPanel/P_OptionsPanel_Canvas/Layout/Center/Panel/Top/ApOptions");
+            GameObject.Destroy(apOptions);
+
+            SetupAPOptionsButtons();
+        }
+
         public static void AddClientMessage(string message)
         {
             Transform main = ClientPanel.transform.Find("Canvas/Layout/Center/Main");
             RectTransform clientLogsRect = main.Find("InsetWindow/ClientLogs").GetComponent<RectTransform>();
             ScrollRect scrollRect = main.GetComponent<ScrollRect>();
 
-            GameObject entry = GameObject.Instantiate(RemoveUnwantedComponents(Data.logTemplate, true), clientLogsRect);
+            GameObject entry = GameObject.Instantiate(RemoveUnwantedComponents(logTemplate, true), clientLogsRect);
             TextMeshProUGUI textComponent = entry.transform.Find("Text (TMP)").GetComponent<TextMeshProUGUI>();
             textComponent.text = message;
             textComponent.alignment = TextAlignmentOptions.Left;
@@ -689,7 +888,7 @@ namespace ReplantedArchipelago.Patches
 
         public static GameObject CreateButton(string label, Transform parent, Action onClick)
         {
-            GameObject button = GameObject.Instantiate(Data.buttonTemplate, parent);
+            GameObject button = GameObject.Instantiate(buttonTemplate, parent);
             button.name = label;
             button.GetComponentInChildren<TextMeshProUGUI>().text = label;
 
@@ -699,9 +898,20 @@ namespace ReplantedArchipelago.Patches
             return button;
         }
 
+        public static GameObject CreateCheckbox(string label, bool isOn, Transform parent)
+        {
+            GameObject checkBox = GameObject.Instantiate(checkBoxTemplate, parent);
+            checkBox.name = $"{label} Toggle";
+            checkBox.GetComponentInChildren<TextMeshProUGUI>().text = label;
+            Toggle toggleComponent = checkBox.GetComponentInChildren<Toggle>();
+            toggleComponent.onValueChanged.RemoveAllListeners();
+            toggleComponent.isOn = isOn;
+            return checkBox;
+        }
+
         public static GameObject CreateSubheader(string label, Transform parent)
         {
-            GameObject subheading = GameObject.Instantiate(Data.subheaderTemplate, parent);
+            GameObject subheading = GameObject.Instantiate(subheaderTemplate, parent);
             subheading.name = label;
             subheading.GetComponentInChildren<TextMeshProUGUI>().text = label;
             return subheading;
@@ -758,9 +968,9 @@ namespace ReplantedArchipelago.Patches
             private static void Postfix(SeedChooserEntryModel __instance)
             {
                 SeedType theSeedType = __instance.m_chosenSeed.mSeedType;
-                if (Data.plantStats.ContainsKey(theSeedType))
+                if (PlantStatRando.plantStats.ContainsKey(theSeedType))
                 {
-                    __instance.m_sunCostModel.Value = Data.plantStats[theSeedType].Cost;
+                    __instance.m_sunCostModel.Value = PlantStatRando.plantStats[theSeedType].Cost;
                 }
             }
         }
@@ -970,15 +1180,15 @@ namespace ReplantedArchipelago.Patches
                     int plantIndex = System.Array.FindIndex(Data.plantNames, plantName => plantName == thePlantName);
 
                     TMP_Text plantDescription = plant.Find("Offset/ToolTip/Description").GetComponent<TextMeshProUGUI>();
-                    if (plantDescription.text == Data.plantStats[Data.seedTypes[plantIndex]].StatsString)
+                    if (plantDescription.text == PlantStatRando.plantStats[Data.seedTypes[plantIndex]].StatsString)
                     {
                         return;
                     }
-                    plantDescription.text = Data.plantStats[Data.seedTypes[plantIndex]].StatsString;
+                    plantDescription.text = PlantStatRando.plantStats[Data.seedTypes[plantIndex]].StatsString;
 
                     Transform controllerDescription = plant.Find("Offset/ControllerTipContainer/ToolTipController/Description");
                     RemoveUnwantedComponents(controllerDescription.gameObject, false);
-                    controllerDescription.GetComponent<TextMeshProUGUI>().text = Data.plantStats[Data.seedTypes[plantIndex]].StatsString;
+                    controllerDescription.GetComponent<TextMeshProUGUI>().text = PlantStatRando.plantStats[Data.seedTypes[plantIndex]].StatsString;
                 }
             }
         }
@@ -991,21 +1201,21 @@ namespace ReplantedArchipelago.Patches
                 if (APClient.plantStatRandomisationEnabled)
                 {
                     GameObject description = GameObject.Find("GlobalPanels(Clone)/P_Almanac_Plants/Canvas/Layout/Center/Panel/SelectedItem/Scroll View/Viewport/SelectedItemInfoBox/SelectedItemInfoLabel");
-                    if (description != null && Data.plantStats.ContainsKey(__instance.m_plant.mSeedType))
+                    if (description != null && PlantStatRando.plantStats.ContainsKey(__instance.m_plant.mSeedType))
                     {
                         string originalText = description.GetComponent<TextMeshProUGUI>().text;
                         string tooltipText = originalText.Substring(0, originalText.IndexOf("<color=#cc241d>"));
-                        description.GetComponent<TextMeshProUGUI>().text = tooltipText + "<color=#cc241d>" + "\n" + Data.plantStats[__instance.m_plant.mSeedType].StatsString; //Set stat multiplier text
-                        GameObject.Find("GlobalPanels(Clone)/P_Almanac_Plants/Canvas/Layout/Center/Panel/SelectedItem/Scroll View/Viewport/SelectedItemInfoBox/InfoBox/SelectedItemCostLabel").GetComponent<TextMeshProUGUI>().text = $"Cost: {Data.plantStats[__instance.m_plant.mSeedType].Cost}"; //Set sun price
+                        description.GetComponent<TextMeshProUGUI>().text = tooltipText + "<color=#cc241d>" + "\n" + PlantStatRando.plantStats[__instance.m_plant.mSeedType].StatsString; //Set stat multiplier text
+                        GameObject.Find("GlobalPanels(Clone)/P_Almanac_Plants/Canvas/Layout/Center/Panel/SelectedItem/Scroll View/Viewport/SelectedItemInfoBox/InfoBox/SelectedItemCostLabel").GetComponent<TextMeshProUGUI>().text = $"Cost: {PlantStatRando.plantStats[__instance.m_plant.mSeedType].Cost}"; //Set sun price
                         GameObject.Find("GlobalPanels(Clone)/P_Almanac_Plants/Canvas/Layout/Center/Panel/SelectedItem/Scroll View/Viewport/SelectedItemInfoBox/InfoBox/SelectedItemRechargeLabel").SetActive(false); //Hide the OG recharge text
                     }
                 }
-                else if (APClient.sunPrices.Count > 0 && Data.plantStats.ContainsKey(__instance.m_plant.mSeedType))
+                else if (APClient.sunPrices.Count > 0 && PlantStatRando.plantStats.ContainsKey(__instance.m_plant.mSeedType))
                 {
                     GameObject sunCost = GameObject.Find("GlobalPanels(Clone)/P_Almanac_Plants/Canvas/Layout/Center/Panel/SelectedItem/Scroll View/Viewport/SelectedItemInfoBox/InfoBox/SelectedItemCostLabel");
                     if (sunCost != null)
                     {
-                        sunCost.GetComponent<TextMeshProUGUI>().text = $"Cost: {Data.plantStats[__instance.m_plant.mSeedType].Cost}";
+                        sunCost.GetComponent<TextMeshProUGUI>().text = $"Cost: {PlantStatRando.plantStats[__instance.m_plant.mSeedType].Cost}";
                     }
                 }
             }
