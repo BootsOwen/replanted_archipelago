@@ -118,7 +118,6 @@ namespace ReplantedArchipelago.Patches
                     plantDefinition.m_launchRate = theStats.Rate;
                     plantDefinition.m_seedCost = theStats.Cost;
                     plantDefinition.m_refreshTime = theStats.Refresh;
-                    Main.Log($"{plantDefinition.m_seedType} {plantDefinition.m_launchRate}");
                 }
             }
             Main.Log("Reset randomised plant stats.");

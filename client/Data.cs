@@ -16,7 +16,7 @@ namespace ReplantedArchipelago
         //Version to match with generation
         public static string GenVersion = "1.10";
         //Whether cheat keys are enabled
-        public static bool CheatKeys = true;
+        public static bool CheatKeys = false;
         public static bool SkipAwardScreen = false;
 
         public static System.Random random = new System.Random();

@@ -384,13 +384,6 @@ namespace ReplantedArchipelago
                             lockedTile.SetActive(false);
                         }
                     }
-                    else if (item.ItemId == 2004) //Butter ability
-                    {
-                        if (ButterAbility.ButterAllowed())
-                        {
-                            ButterAbility.butter.SetActive(true);
-                        }
-                    }
                 }
 
                 //Increase counter for displayed messages (to prevent messages being displayed and consumables being given multiple times)

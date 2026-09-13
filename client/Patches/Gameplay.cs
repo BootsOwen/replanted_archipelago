@@ -809,10 +809,9 @@ namespace ReplantedArchipelago.Patches
                 //Update butter display
                 if (__instance.GameScene == GameScenes.Playing)
                 {
-                    GameObject butter = GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center/TopLeftLayout/ButterContainer/Butter");
-                    if (butter != null)
+                    if (ButterAbility.butter != null)
                     {
-                        butter.SetActive(ButterAbility.ButterAllowed());
+                        ButterAbility.butter.SetActive(ButterAbility.ButterAllowed());
                     }
                 }
 
@@ -856,38 +855,48 @@ namespace ReplantedArchipelago.Patches
         {
             private static void Postfix(Board __instance)
             {
-                if (ButterAbility.ButterAllowed())
+                if (__instance.mApp.GameScene == GameScenes.Playing)
                 {
-                    ButterAbility.UpdateButterCooldown(__instance);
-                }
-
-                if (growingZombies.Count > 0)
-                {
-                    List<ZombieGrowingInformation> stillGrowing = new List<ZombieGrowingInformation>();
-                    for (int growingIndex = 0; growingIndex < growingZombies.Count; growingIndex++)
+                    if (ButterAbility.ButterAllowed())
                     {
-                        for (int zombieIndex = 0; zombieIndex < __instance.m_zombies.Count; zombieIndex++)
+                        if (ButterAbility.butter == null)
                         {
-                            if (__instance.m_zombies[zombieIndex].DataID == growingZombies[growingIndex].dataID)
-                            {
-                                growingZombies[growingIndex].progress += 1;
-                                float progress = growingZombies[growingIndex].progress / growingZombies[growingIndex].duration;
-                                if (progress >= 1)
-                                {
-                                    progress = 1;
-                                }
-                                else
-                                {
-                                    stillGrowing.Add(growingZombies[growingIndex]);
-                                }
-
-                                float targetScaleAddon = growingZombies[growingIndex].targetScale - growingZombies[growingIndex].defaultScale;
-                                __instance.m_zombies[zombieIndex].mScaleZombie = growingZombies[growingIndex].defaultScale + (progress * targetScaleAddon);
-                                __instance.m_zombies[zombieIndex].mController.m_visualOffset = growingZombies[growingIndex].defaultOffset + new Vector3(60 * progress, -190 * progress, 0);
-                            }
+                            ButterAbility.CreateButterUI();
+                        }
+                        else
+                        {
+                            ButterAbility.UpdateButterCooldown(__instance);
                         }
                     }
-                    growingZombies = stillGrowing;
+
+                    if (growingZombies.Count > 0)
+                    {
+                        List<ZombieGrowingInformation> stillGrowing = new List<ZombieGrowingInformation>();
+                        for (int growingIndex = 0; growingIndex < growingZombies.Count; growingIndex++)
+                        {
+                            for (int zombieIndex = 0; zombieIndex < __instance.m_zombies.Count; zombieIndex++)
+                            {
+                                if (__instance.m_zombies[zombieIndex].DataID == growingZombies[growingIndex].dataID)
+                                {
+                                    growingZombies[growingIndex].progress += 1;
+                                    float progress = growingZombies[growingIndex].progress / growingZombies[growingIndex].duration;
+                                    if (progress >= 1)
+                                    {
+                                        progress = 1;
+                                    }
+                                    else
+                                    {
+                                        stillGrowing.Add(growingZombies[growingIndex]);
+                                    }
+
+                                    float targetScaleAddon = growingZombies[growingIndex].targetScale - growingZombies[growingIndex].defaultScale;
+                                    __instance.m_zombies[zombieIndex].mScaleZombie = growingZombies[growingIndex].defaultScale + (progress * targetScaleAddon);
+                                    __instance.m_zombies[zombieIndex].mController.m_visualOffset = growingZombies[growingIndex].defaultOffset + new Vector3(60 * progress, -190 * progress, 0);
+                                }
+                            }
+                        }
+                        growingZombies = stillGrowing;
+                    }
                 }
             }
         }
@@ -1301,6 +1310,8 @@ namespace ReplantedArchipelago.Patches
                 {
                     Main.Log("Randomised plant stats do not apply to this level.");
                 }
+
+                ButterAbility.butter = null;
             }
         }
 
@@ -1759,11 +1770,12 @@ namespace ReplantedArchipelago.Patches
                         if (__instance.GameMode != GameMode.ChallengeWarAndPeas && __instance.GameMode != GameMode.ChallengeWarAndPeas2)
                         {
                             __result.m_value = 2; //Re-values Peahead to not be so pervasive with Zombie rando enabled
+                            __result.m_firstWave = 3;
                         }
                         else
                         {
                             __result.m_value = 1;
-                            __result.m_firstWave = 3;
+                            __result.m_firstWave = 1;
                         }
                     }
                     else if (theZombieType == ZombieType.Imp)
@@ -1848,8 +1860,6 @@ namespace ReplantedArchipelago.Patches
                     __instance.mZombieCountDown = (int)(__instance.mZombieCountDown * 0.3);
                 }
                 receivedRingLinkAmount = 0;
-
-                ButterAbility.CreateButterUI();
             }
         }
 

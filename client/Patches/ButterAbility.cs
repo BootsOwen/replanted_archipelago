@@ -15,29 +15,42 @@ namespace ReplantedArchipelago.Patches
 
         public static void CreateButterUI()
         {
-            butter = GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center/TopLeftLayout/ButterContainer/Butter");
-            if (butter != null)
+            GameObject uiObject = GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center");
+            if (uiObject != null)
             {
-                GameObject butterDisplay = GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center/TopLeftLayout/ButterContainer/Butter/ControllerVisblity/Butter");
-                UnityEngine.UI.Button button = butter.AddComponent<UnityEngine.UI.Button>();
-                button.onClick.AddListener(((Action)ButterClicked));
-                butter.SetActive(ButterAllowed());
+                GameObject conveyorSeedBank = uiObject.transform.Find("ConveyorSeedBank").gameObject;
+                if (conveyorSeedBank == null || !conveyorSeedBank.activeSelf)
+                {
+                    butter = uiObject.transform.Find("TopLeftLayout/ButterContainer/Butter").gameObject;
+                }
+                else
+                {
+                    butter = uiObject.transform.Find("ConveyorSeedBank/Butter").gameObject;
+                }
 
-                disabledButter = GameObject.Instantiate(butterDisplay, butterDisplay.transform.parent);
-                disabledButter.name = "DisabledButter";
-                UnityEngine.UI.Image butterImage = disabledButter.GetComponent<UnityEngine.UI.Image>();
-                butterImage.color = new UnityEngine.Color(0f, 0f, 0f, 0.7f);
-                disabledButter.SetActive(false);
+                if (butter != null)
+                {
+                    GameObject butterDisplay = butter.transform.Find("ControllerVisblity/Butter").gameObject;
+                    UnityEngine.UI.Button button = butter.AddComponent<UnityEngine.UI.Button>();
+                    button.onClick.AddListener(((Action)ButterClicked));
+                    butter.SetActive(ButterAllowed());
 
-                butterTimer = GameObject.Instantiate(disabledButter, disabledButter.transform.parent);
-                butterTimer.name = "ButterTimer";
-                UnityEngine.UI.Image butterTimerImage = butterTimer.GetComponent<UnityEngine.UI.Image>();
-                butterTimerImage.type = UnityEngine.UI.Image.Type.Filled;
-                butterTimerImage.fillMethod = UnityEngine.UI.Image.FillMethod.Vertical;
-                butterTimerImage.fillOrigin = (int)UnityEngine.UI.Image.OriginVertical.Top;
-                butterTimer.SetActive(false);
+                    disabledButter = GameObject.Instantiate(butterDisplay, butterDisplay.transform.parent);
+                    disabledButter.name = "DisabledButter";
+                    UnityEngine.UI.Image butterImage = disabledButter.GetComponent<UnityEngine.UI.Image>();
+                    butterImage.color = new UnityEngine.Color(0f, 0f, 0f, 0.7f);
+                    disabledButter.SetActive(false);
 
-                GameObject.Destroy(GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center/TopLeftLayout/ButterContainer/Butter/ControllerVisblity/PlayerNumber"));
+                    butterTimer = GameObject.Instantiate(disabledButter, disabledButter.transform.parent);
+                    butterTimer.name = "ButterTimer";
+                    UnityEngine.UI.Image butterTimerImage = butterTimer.GetComponent<UnityEngine.UI.Image>();
+                    butterTimerImage.type = UnityEngine.UI.Image.Type.Filled;
+                    butterTimerImage.fillMethod = UnityEngine.UI.Image.FillMethod.Vertical;
+                    butterTimerImage.fillOrigin = (int)UnityEngine.UI.Image.OriginVertical.Top;
+                    butterTimer.SetActive(false);
+
+                    GameObject.Destroy(butter.transform.Find("ControllerVisblity/PlayerNumber").gameObject);
+                }
             }
         }
 
@@ -62,7 +75,7 @@ namespace ReplantedArchipelago.Patches
 
         public static void ToggleCustomButterObjects(bool visible)
         {
-            if (visible)
+            if (visible && butter != null)
             {
                 GameObject disabledControllerPrompt = GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center/TopLeftLayout/ButterContainer/Butter/ControllerVisblity/DisabledButter/P_ControllerPrompt_Butter");
                 if (disabledControllerPrompt != null)
@@ -75,9 +88,27 @@ namespace ReplantedArchipelago.Patches
                 {
                     GameObject.Destroy(timerControllerPrompt);
                 }
+
+                GameObject disabledControllerPromptConveyor = GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center/ConveyorSeedBank/Butter/ControllerVisblity/DisabledButter/P_ControllerPrompt_Butter");
+                if (disabledControllerPromptConveyor != null)
+                {
+                    GameObject.Destroy(disabledControllerPromptConveyor);
+                }
+
+                GameObject timerControllerPromptConveyor = GameObject.Find("Panels/P_Gameplay_MainHUD/Canvas/Layout/Center/ConveyorSeedBank/Butter/ControllerVisblity/ButterTimer/P_ControllerPrompt_Butter");
+                if (timerControllerPromptConveyor != null)
+                {
+                    GameObject.Destroy(timerControllerPromptConveyor);
+                }
             }
-            disabledButter.SetActive(visible);
-            butterTimer.SetActive(visible);
+            if (disabledButter != null)
+            {
+                disabledButter.SetActive(visible);
+            }
+            if (butterTimer != null)
+            {
+                butterTimer.SetActive(visible);
+            }
         }
 
         [HarmonyPatch(typeof(GamepadCursorController), nameof(GamepadCursorController._updateTertiaryAction))]
@@ -137,7 +168,10 @@ namespace ReplantedArchipelago.Patches
                 }
                 else
                 {
-                    butterTimer.GetComponent<UnityEngine.UI.Image>().fillAmount = board.mPottedPlantsCollected / (float)butterCooldownLength;
+                    if (butterTimer != null)
+                    {
+                        butterTimer.GetComponent<UnityEngine.UI.Image>().fillAmount = board.mPottedPlantsCollected / (float)butterCooldownLength;
+                    }
                 }
             }
         }
@@ -156,12 +190,12 @@ namespace ReplantedArchipelago.Patches
 
         public static bool ButterAllowed()
         {
-            return APClient.receivedItems.Contains(2004) && !(Main.cachedGameplayActivity == null || Main.cachedGameplayActivity.IsWhackAZombieLevel() || Main.cachedGameplayActivity.GameMode == GameMode.ChallengeBeghouled || Main.cachedGameplayActivity.GameMode == GameMode.ChallengeBeghouledTwist || Main.cachedGameplayActivity.IsIZombieLevel() || Main.cachedGameplayActivity.GameMode == GameMode.ChallengeZombiquarium || Main.cachedGameplayActivity.GameMode == GameMode.ChallengeZenGarden || Main.cachedGameplayActivity.GameMode == GameMode.TreeOfWisdom || Main.cachedGameplayActivity.IsScaryPotterLevel());
+            return APClient.receivedItems.Contains(2004) && !(Main.cachedGameplayActivity == null || Main.cachedGameplayActivity.IsSlotMachineLevel() || Main.cachedGameplayActivity.IsWhackAZombieLevel() || Main.cachedGameplayActivity.GameMode == GameMode.ChallengeBeghouled || Main.cachedGameplayActivity.GameMode == GameMode.ChallengeBeghouledTwist || Main.cachedGameplayActivity.IsIZombieLevel() || Main.cachedGameplayActivity.GameMode == GameMode.ChallengeZombiquarium || Main.cachedGameplayActivity.GameMode == GameMode.ChallengeZenGarden || Main.cachedGameplayActivity.GameMode == GameMode.TreeOfWisdom || Main.cachedGameplayActivity.IsScaryPotterLevel());
         }
 
         public static bool CanButterRightNow(Board board)
         {
-            return ButterAllowed() && board.mPottedPlantsCollected <= 1;
+            return butter != null && ButterAllowed() && board.mPottedPlantsCollected <= 1;
         }
     }
 }
