@@ -84,6 +84,12 @@ item_ids: dict[str, int] = {
 	"Imp (I, Zombie)": 95,
 	"Gargantuar (I, Zombie)": 96,
 	"Dancing Zombie (I, Zombie)": 97,
+	"Invisighoul Trap": 98,
+	"Seed Bank Randomiser Trap": 99,
+	"Paranoia Trap": 2001,
+	"Ladder Trap": 2002,
+	"Zombie Growth Serum Trap": 2003,
+	"Butter Ability": 2004
 }
 
 #100-199 is reserved for plants

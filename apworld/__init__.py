@@ -1,4 +1,4 @@
-GEN_VERSION = "1.9" #Used to match with client
+GEN_VERSION = "1.10" #Used to match with client
 from BaseClasses import Item, ItemClassification
 from worlds.AutoWorld import WebWorld, World
 from .Items import PVZRItem, item_ids
@@ -7,7 +7,7 @@ from .Options import PVZROptions, OPTION_GROUPS
 from .Regions import create_regions
 from Options import OptionError
 from .Plants import create_plants, create_projectiles, randomise_plant_stats, get_all_potential_progression_plants
-from .Levels import create_levels, randomise_zombie_lists, randomise_conveyors
+from .Levels import create_levels, randomise_zombie_lists, randomise_conveyors, randomise_plant_vases
 from .Zombies import create_zombies
 import copy, math
 
@@ -48,10 +48,10 @@ class PVZRWorld(World):
 
         "Adventure": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure"}.union({"Day Access", "Night Access", "Pool Access", "Fog Access", "Roof Access"}),
         "Day": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Day"}.union({"Day Access"}),
-        "Night": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Day"}.union({"Night Access"}),
-        "Pool": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Day"}.union({"Pool Access"}),
-        "Fog": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Day"}.union({"Fog Access"}),
-        "Roof": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Day"}.union({"Roof Access"}),
+        "Night": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Night"}.union({"Night Access"}),
+        "Pool": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Pool"}.union({"Pool Access"}),
+        "Fog": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Fog"}.union({"Fog Access"}),
+        "Roof": {level.unlock_item_name for level in create_levels().values() if level.type == "Adventure" and level.location == "Roof"}.union({"Roof Access"}),
 
         "Mini-games": {level.unlock_item_name for level in create_levels().values() if level.type == "Mini-games"}.union({"Mini-games"}),
         "Puzzle": {level.unlock_item_name for level in create_levels().values() if level.type == "Puzzle"}.union({"Puzzle Mode"}),
@@ -94,9 +94,10 @@ class PVZRWorld(World):
                         progression_items.append(plant)
         if self.options.lock_vasebreaker_plants:
             for level in [level for level in self.included_levels.values() if level.special == "vasebreaker"]:
-                for plant in level.vasebreaker_plants.keys():
-                    if not plant in progression_items:
-                        progression_items.append(plant)
+                for wave in level.vasebreaker_plants:
+                    for plant in wave.keys():
+                        if not plant in progression_items:
+                            progression_items.append(plant)
         if self.options.lock_izombie_zombies and self.options.puzzle_levels.value != 0:
             progression_items += ['Zombie (I, Zombie)', 'Conehead Zombie (I, Zombie)', 'Buckethead Zombie (I, Zombie)', 'Football Zombie (I, Zombie)', 'Screen Door Zombie (I, Zombie)', 'Digger Zombie (I, Zombie)', 'Ladder Zombie (I, Zombie)', 'Bungee Zombie (I, Zombie)', 'Balloon Zombie (I, Zombie)', 'Pole Vaulting Zombie (I, Zombie)', 'Imp (I, Zombie)', 'Gargantuar (I, Zombie)', 'Dancing Zombie (I, Zombie)']
 
@@ -119,7 +120,7 @@ class PVZRWorld(World):
         if self.options.adventure_mode_progression.value in [1, 2]:
             progression_items += ["Night Access", "Pool Access", "Fog Access", "Roof Access"]
 
-        progression_items += [progression_plant for progression_plant in self.progression_plants if progression_plant not in self.starting_plants + progression_items]
+        progression_items += [progression_plant for progression_plant in self.progression_plants if progression_plant not in (self.starting_items + progression_items)]
         progression_items += ["Extra Seed Slot"] * (10 - (self.preplaced_progression.count("Extra Seed Slot")))
 
         if self.options.progressive_sun_capacity_items.value:
@@ -144,13 +145,15 @@ class PVZRWorld(World):
             useful_items += ["Zen Garden", "Phonograph", "Gardening Glove", "Wheelbarrow", "Stinky", "Gold Watering Can"]
         if self.options.mower_reward_upgrades.value > 0:
             useful_items += ["Mower Reward Upgrade"] * self.options.mower_reward_upgrades.value
+        if self.options.shuffle_butter_ability.value:
+            useful_items += ["Butter Ability"]
 
         self.sun_per_upgrade = [0, 5, 25, 50][self.options.starting_sun_upgrades.value]
         if self.sun_per_upgrade > 0:
             sun_upgrades_to_generate = int(self.options.maximum_sun_upgrades.value/self.sun_per_upgrade)
             useful_items += ["Additional Starting Sun"] * sun_upgrades_to_generate
 
-        remaining_plants = [plant_name for plant_name in sorted(self.all_plants.keys()) if not plant_name in self.starting_plants + self.progression_item_names]
+        remaining_plants = [plant_name for plant_name in sorted(self.all_plants.keys()) if not plant_name in (self.starting_items + self.progression_item_names)]
         self.random.shuffle(remaining_plants)
         for seed_packet in remaining_plants:
             useful_items.append(seed_packet)
@@ -160,7 +163,7 @@ class PVZRWorld(World):
     def pick_trap_items(self, number_of_traps) -> list[str]:
         trap_items = []
 
-        trap_weights = {"Zombie Ambush Trap": self.options.zombie_ambush_trap_weight.value, "Mower Deploy Trap": self.options.mower_deploy_trap_weight.value, "Seed Packet Cooldown Trap": self.options.seed_packet_cooldown_trap_weight.value, "Zombie Shuffle Trap": self.options.zombie_shuffle_trap_weight.value, "RV Trap": self.options.rv_trap_weight.value, "Lawn Flip Trap": self.options.lawn_flip_trap_weight.value, "Lawn Randomiser Trap": self.options.lawn_randomiser_trap_weight.value, "Zombie Caffeine Trap": self.options.zombie_caffeine_trap_weight.value, "Crater Trap": self.options.crater_trap_weight.value}
+        trap_weights = {"Zombie Ambush Trap": self.options.zombie_ambush_trap_weight.value, "Mower Deploy Trap": self.options.mower_deploy_trap_weight.value, "Seed Packet Cooldown Trap": self.options.seed_packet_cooldown_trap_weight.value, "Zombie Shuffle Trap": self.options.zombie_shuffle_trap_weight.value, "RV Trap": self.options.rv_trap_weight.value, "Lawn Flip Trap": self.options.lawn_flip_trap_weight.value, "Lawn Randomiser Trap": self.options.lawn_randomiser_trap_weight.value, "Zombie Caffeine Trap": self.options.zombie_caffeine_trap_weight.value, "Crater Trap": self.options.crater_trap_weight.value, "Invisighoul Trap": self.options.invisighoul_trap_weight.value, "Seed Bank Randomiser Trap": self.options.seed_bank_randomiser_trap_weight.value, "Paranoia Trap": self.options.paranoia_trap_weight.value, "Ladder Trap": self.options.ladder_trap_weight.value, "Zombie Growth Serum Trap": self.options.zombie_growth_serum_trap_weight.value}
         if sum(list(trap_weights.values())) != 0:
             for i in range(0, number_of_traps):
                 trap_items.append(self.random.choices(list(trap_weights.keys()), weights=list(trap_weights.values()), k=1)[0])
@@ -242,6 +245,8 @@ class PVZRWorld(World):
                 self.options.cloudy_day_levels_goal.value = 0
                 self.options.bonus_levels_goal.value = 0
                 self.options.costume_chances.value = {}
+                self.options.shuffle_butter_ability.value = False
+                self.options.zombie_growth_serum_trap_weight.value = 0
             self.requires_replanted = (self.options.cloudy_day_levels.value or self.options.randomised_zombies.value["TrashCan"] or self.options.zombie_randomised_modes.value["Survival"] or self.options.bonus_levels.value or self.options.china_level.value)
 
             #Setup level unlock order randomisation
@@ -383,6 +388,8 @@ class PVZRWorld(World):
             #Randomise conveyors
             if self.options.conveyor_randomisation.value:
                 randomise_conveyors(self)
+            if self.options.vasebreaker_randomisation.value:
+                randomise_plant_vases(self)
 
             #Starting items
             self.starting_slots = ["Extra Seed Slot"] * (self.options.starting_seed_slots.value - 1)
@@ -578,7 +585,35 @@ class PVZRWorld(World):
                 conveyor_key = str(self.included_levels[level].level_id)
                 if conveyor_key in self.conveyor_map and "core" in self.conveyor_map[conveyor_key]:
                     self.included_levels[level].core_conveyor_plants = self.conveyor_map[conveyor_key]["core"]
-                    print(level, self.included_levels[level].core_conveyor_plants)
+
+        plant_id_to_plant_name = {}
+        for plant in self.all_plants:
+            plant_id_to_plant_name[self.all_plants[plant].plant_id] = self.all_plants[plant].name
+
+        #UT Plant Banlist
+        self.plant_banlist = slot_data["plant_banlist"]
+        if self.plant_banlist != {}:
+            for level in self.included_levels:
+                plant_banlist_key = str(self.included_levels[level].level_id)
+                if plant_banlist_key in self.plant_banlist:
+                    self.included_levels[level].plant_banlist = []
+                    for plant_id in self.plant_banlist[plant_banlist_key]:
+                        self.included_levels[level].plant_banlist.append(plant_id_to_plant_name[plant_id])
+
+        #UT Vasebreaker rando - needed for vasebreaker lock logic
+        self.vasebreaker_plants_map = slot_data["vasebreaker_plants_map"]
+        if self.vasebreaker_plants_map != {}:
+            for level in self.included_levels:
+                vasebreaker_key = str(self.included_levels[level].level_id)
+                if vasebreaker_key in self.vasebreaker_plants_map:
+                    for wave_index in range(0, len(self.vasebreaker_plants_map[vasebreaker_key])):
+                        new_vases = {}
+                        for plant_id in self.vasebreaker_plants_map[vasebreaker_key][wave_index]:
+                            if plant_id == "107":
+                                new_vases["Backwards Repeater (Vasebreaker)"] = self.vasebreaker_plants_map[vasebreaker_key][wave_index][plant_id]                            
+                            else:
+                                new_vases[plant_id_to_plant_name[int(plant_id)]] = self.vasebreaker_plants_map[vasebreaker_key][wave_index][plant_id]
+                        self.included_levels[level].vasebreaker_plants[wave_index] = new_vases
 
     def generate_basic(self) -> None:
         #Music randomisation
@@ -601,6 +636,8 @@ class PVZRWorld(World):
         self.zombie_map = {}
         self.conveyor_map = {}
         self.zombie_weight_map = {}
+        self.vasebreaker_plants_map = {}
+        self.vasebreaker_zombies_map = {}
         for level in self.included_levels:
             level_data = self.included_levels[level]
             if level_data.zombies != [] and self.options.zombie_randomisation.value and self.options.zombie_randomised_modes.value[level_data.type]: #Zombie Rando
@@ -608,13 +645,34 @@ class PVZRWorld(World):
             if self.options.conveyor_randomisation.value and level_data.conveyor: #Conveyor Rando
                 level_conveyor_map = {"weights": {}, "default": [], "core": []} 
                 for plant_name in level_data.conveyor:
-                    plant_data = self.all_plants[plant_name]
-                    level_conveyor_map["weights"][plant_data.plant_id] = level_data.conveyor[plant_name]
+                    if plant_name == "Backwards Repeater (Vasebreaker)":
+                        level_conveyor_map["weights"][107] = level_data.conveyor[plant_name]
+                    else:
+                        level_conveyor_map["weights"][self.all_plants[plant_name].plant_id] = level_data.conveyor[plant_name]
                 default_seeds = []
                 if level_data.conveyor_default > 0:
                     level_conveyor_map["default"] = list(level_conveyor_map["weights"].keys())[:level_data.conveyor_default]
                 level_conveyor_map["core"] = level_data.core_conveyor_plants
                 self.conveyor_map[level_data.level_id] = level_conveyor_map
+            if level_data.vasebreaker_plants != level_data.unmodified.vasebreaker_plants:
+                vasebreaker_plant_map = []
+                for wave in level_data.vasebreaker_plants:
+                    wave_plant_map = {}
+                    for plant_name in wave:
+                        if plant_name == "Backwards Repeater (Vasebreaker)":
+                            wave_plant_map[107] = wave[plant_name]
+                        else:
+                            wave_plant_map[self.all_plants[plant_name].plant_id] = wave[plant_name]
+                    vasebreaker_plant_map.append(wave_plant_map)
+                self.vasebreaker_plants_map[level_data.level_id] = vasebreaker_plant_map
+            if level_data.vasebreaker_zombies != level_data.unmodified.vasebreaker_zombies:
+                vasebreaker_zombie_map = []
+                for wave in level_data.vasebreaker_zombies:
+                    wave_zombie_map = {}
+                    for zombie_name in wave:
+                        wave_zombie_map[self.all_zombies[zombie_name].zombie_id] = wave[zombie_name]
+                    vasebreaker_zombie_map.append(wave_zombie_map)
+                self.vasebreaker_zombies_map[level_data.level_id] = vasebreaker_zombie_map
             if level_data.zombies != [] and self.options.zombie_weight_randomisation.value == 2:
                 zombie_weight_map = {}
                 for zombie in level_data.zombies:
@@ -650,7 +708,16 @@ class PVZRWorld(World):
                 plant_data = self.all_plants[plant_name]
                 self.sun_prices[plant_data.plant_id] = plant_data.cost
 
-        return {"music_map": self.music_map, "starting_inv_count": len(self.starting_items), "adventure_mode_progression": self.options.adventure_mode_progression.value, "shop_prices": self.shop_prices, "minigame_unlocks": self.minigame_unlocks, "survival_unlocks": self.survival_unlocks, "izombie_unlocks": self.izombie_unlocks, "vasebreaker_unlocks": self.vasebreaker_unlocks, "gen_version": GEN_VERSION, "imitater_open": self.options.imitater_behaviour.value == 1, "disable_storm_flashes": self.options.disable_storm_flashes.value, "adventure_areas_goal": self.adventure_areas_goal, "minigame_levels_goal": self.minigame_levels_goal, "puzzle_levels_goal": self.puzzle_levels_goal, "survival_levels_goal": self.survival_levels_goal, "deathlink_enabled": self.options.death_link.value, "fast_goal": self.fast_goal, "adventure_levels_goal": self.adventure_levels_goal, "easy_upgrade_plants": self.options.easy_upgrade_plants.value, "cloudy_day_levels_goal": self.cloudy_day_levels_goal, "bonus_levels_goal": self.bonus_levels_goal, "overall_levels_goal": self.overall_levels_goal, "cloudy_day_unlocks": self.cloudy_day_unlocks, "zombie_map": self.zombie_map, "minigame_levels": self.options.minigame_levels.value, "puzzle_levels": self.options.puzzle_levels.value, "survival_levels": self.options.survival_levels.value, "bonus_levels": self.options.bonus_levels.value, "cloudy_day_levels": self.options.cloudy_day_levels.value, "sun_prices": self.sun_prices, "recharge_times": self.recharge_times, "firing_rates": self.firing_rates, "projectile_damages": self.projectile_damages, "plant_healths": self.plant_healths, "conveyor_map": self.conveyor_map, "sun_per_upgrade": self.sun_per_upgrade, "energylink_enabled": self.options.energy_link.value, "taco_goal": self.taco_goal, "china_level": self.options.china_level.value, "zombie_weight_map": self.zombie_weight_map, "zombie_weight_randomisation": self.options.zombie_weight_randomisation.value, "ringlink_enabled": self.options.ring_link.value, "progressive_sun_capacity_items": self.options.progressive_sun_capacity_items.value, "individual_tile_unlock_items": self.options.individual_tile_unlock_items.value, "wavesanity_map": self.wavesanity_map, "costume_chances": self.options.costume_chances.value, "seedlink_enabled": self.options.seed_link.value, "lawnlink_enabled": self.options.lawn_link.value, "lawnlink_chances": self.options.lawn_link_chances.value, "lock_vasebreaker_plants": self.options.lock_vasebreaker_plants.value, "lock_conveyor_plants": self.options.lock_conveyor_plants.value, "lock_izombie_zombies": self.options.lock_izombie_zombies.value, "requires_replanted": self.requires_replanted}
+        #Plant banlist
+        self.plant_banlist = {}
+        for level in self.included_levels:
+            if self.included_levels[level].choose:
+                available_plants = [plant for plant in self.all_plants.values() if not plant.name in self.included_levels[level].expected_loadout]
+                level_plant_banlist = self.random.sample(available_plants, self.options.randomly_banned_plants_per_level.value)
+                self.included_levels[level].plant_banlist = [plant.name for plant in level_plant_banlist]
+                self.plant_banlist[self.included_levels[level].level_id] = [plant.plant_id for plant in level_plant_banlist]
+
+        return {"music_map": self.music_map, "starting_inv_count": len(self.starting_items), "adventure_mode_progression": self.options.adventure_mode_progression.value, "shop_prices": self.shop_prices, "minigame_unlocks": self.minigame_unlocks, "survival_unlocks": self.survival_unlocks, "izombie_unlocks": self.izombie_unlocks, "vasebreaker_unlocks": self.vasebreaker_unlocks, "gen_version": GEN_VERSION, "imitater_open": self.options.imitater_behaviour.value == 1, "disable_storm_flashes": self.options.disable_storm_flashes.value, "adventure_areas_goal": self.adventure_areas_goal, "minigame_levels_goal": self.minigame_levels_goal, "puzzle_levels_goal": self.puzzle_levels_goal, "survival_levels_goal": self.survival_levels_goal, "deathlink_enabled": self.options.death_link.value, "fast_goal": self.fast_goal, "adventure_levels_goal": self.adventure_levels_goal, "easy_upgrade_plants": self.options.easy_upgrade_plants.value, "cloudy_day_levels_goal": self.cloudy_day_levels_goal, "bonus_levels_goal": self.bonus_levels_goal, "overall_levels_goal": self.overall_levels_goal, "cloudy_day_unlocks": self.cloudy_day_unlocks, "zombie_map": self.zombie_map, "minigame_levels": self.options.minigame_levels.value, "puzzle_levels": self.options.puzzle_levels.value, "survival_levels": self.options.survival_levels.value, "bonus_levels": self.options.bonus_levels.value, "cloudy_day_levels": self.options.cloudy_day_levels.value, "sun_prices": self.sun_prices, "recharge_times": self.recharge_times, "firing_rates": self.firing_rates, "projectile_damages": self.projectile_damages, "plant_healths": self.plant_healths, "conveyor_map": self.conveyor_map, "sun_per_upgrade": self.sun_per_upgrade, "energylink_enabled": self.options.energy_link.value, "taco_goal": self.taco_goal, "china_level": self.options.china_level.value, "zombie_weight_map": self.zombie_weight_map, "zombie_weight_randomisation": self.options.zombie_weight_randomisation.value, "ringlink_enabled": self.options.ring_link.value, "progressive_sun_capacity_items": self.options.progressive_sun_capacity_items.value, "individual_tile_unlock_items": self.options.individual_tile_unlock_items.value, "wavesanity_map": self.wavesanity_map, "costume_chances": self.options.costume_chances.value, "seedlink_enabled": self.options.seed_link.value, "lawnlink_enabled": self.options.lawn_link.value, "lawnlink_chances": self.options.lawn_link_chances.value, "lock_vasebreaker_plants": self.options.lock_vasebreaker_plants.value, "lock_conveyor_plants": self.options.lock_conveyor_plants.value, "lock_izombie_zombies": self.options.lock_izombie_zombies.value, "requires_replanted": self.requires_replanted, "harder_zombie_spawns": self.options.harder_zombie_spawns.value, "plant_banlist": self.plant_banlist, "vasebreaker_zombies_map": self.vasebreaker_zombies_map, "vasebreaker_plants_map": self.vasebreaker_plants_map}
 
     @staticmethod
     def interpret_slot_data(slot_data: dict[str, object]) -> dict[str, object]:
@@ -678,6 +745,9 @@ class PVZRWorld(World):
         elif random >= 0.3:
             if self.options.sun_burst_filler.value:
                 return "Sun Burst"
+        elif random >= 0.25:
+            if self.options.rake_filler.value:
+                return "Rake"
 
         return self.random.choices(items, weights=weights, k=1)[0]
     
@@ -708,15 +778,15 @@ class PVZRWorld(World):
         create_regions(self)        
 
     def write_spoiler(self, spoiler_handle: object) -> None:
-        spoiler_string = f"\nPlants vs. Zombies Spoiler ({self.multiworld.player_name[self.player]}):\n"
+        spoiler_string = f"\n================================\nPlants vs. Zombies Spoiler ({self.multiworld.player_name[self.player]}):\n================================\n"
         
         if self.options.zombie_randomisation.value:
             spoiler_string += "\nRandomised Zombies:\n"
             for level in self.included_levels:
                 level_data = self.included_levels[level]
-                if level_data.zombies != level_data.unmodified.zombies:
+                if level_data.list_zombies() != level_data.unmodified.list_zombies():
                     zombie_string = ""
-                    for zombie in [zombie for zombie in level_data.zombies if not zombie in ["Flag", "Bobsled"]]:
+                    for zombie in [zombie for zombie in level_data.list_zombies() if not zombie in ["Flag", "Bobsled"]]:
                         zombie_string += f"{zombie}, "
                     spoiler_string += f"\n{level_data.name}: {zombie_string.strip(", ")}"
             spoiler_string += "\n"
@@ -731,6 +801,22 @@ class PVZRWorld(World):
                         conveyor_string += f"{plant_name} ({level_data.conveyor[plant_name]}), "
                     spoiler_string += f"\n{level_data.name}: {conveyor_string.strip(", ")}"
             spoiler_string += "\n"
+
+        if self.options.vasebreaker_randomisation.value:
+            spoiler_string += "\nRandomised Vasebreaker Plants:\n"
+            for level in self.included_levels:
+                level_data = self.included_levels[level]
+                if level_data.vasebreaker_plants != level_data.unmodified.vasebreaker_plants:
+                    for wave_index in range(0, len(level_data.vasebreaker_plants)):
+                        vasebreaker_string = ""
+                        for plant_name in level_data.vasebreaker_plants[wave_index]:
+                            vasebreaker_string += f"{plant_name} ({level_data.vasebreaker_plants[wave_index][plant_name]}), "
+
+                        if len(level_data.vasebreaker_plants) > 1:
+                            spoiler_string += f"\n{level_data.name} (Wave #{wave_index + 1}): {vasebreaker_string.strip(", ")}"
+                        else:
+                            spoiler_string += f"\n{level_data.name}: {vasebreaker_string.strip(", ")}"
+            spoiler_string += "\n"            
 
         if self.options.plant_stat_randomisation.value:
             spoiler_string += "\nPlant Stat Modifications:\n"
@@ -768,6 +854,17 @@ class PVZRWorld(World):
 
                 if len(stat_strings) > 0:
                     spoiler_string += f"\n{plant_name}: {" / ".join(stat_strings)}"
+            spoiler_string += "\n"
+
+        if self.options.randomly_banned_plants_per_level.value:
+            spoiler_string += "\nBanned Plants:\n"
+            for level in self.included_levels:
+                level_data = self.included_levels[level]
+                if level_data.plant_banlist != level_data.unmodified.plant_banlist:
+                    plant_banlist_string = ""
+                    for plant_name in level_data.plant_banlist:
+                        plant_banlist_string += f"{plant_name}, "
+                    spoiler_string += f"\n{level_data.name}: {plant_banlist_string.strip(", ")}"
             spoiler_string += "\n"
 
         spoiler_string += "\nExpected Level Loadouts:\n"

@@ -18,7 +18,8 @@ class Level:
     flag_location_ids: list[int] = field(default_factory = list)
     conveyor_default: int = 0
     forced_plants: set[str] = field(default_factory = set)
-    vasebreaker_plants: dict[str, int] = field(default_factory=dict)
+    vasebreaker_plants: list[dict] = field(default_factory = list)
+    vasebreaker_zombies: list[dict] = field(default_factory = list)
     izombie_zombies: set[str] = field(default_factory = set)
     core_conveyor_plants: set[str] = field(default_factory = set)
 
@@ -35,8 +36,10 @@ class Level:
     lawn_rows: int = 5
     ignore_locked_tiles: bool = False
 
+    plant_banlist: list[str] = field(default_factory = list)
+
     def __post_init__(self):
-        self.has_pool = self.location == "Pool" or self.location == "Fog"
+        self.has_pool = (self.location == "Pool" or self.location == "Fog") and not self.special == "vasebreaker"
         self.on_roof = self.location == "Roof" or self.location == "Night Roof"
         self.at_night = self.location == "Night" or self.location == "Fog"
         self.on_ceramic = self.location == "Roof" or self.location == "Night Roof" or self.location == "China"
@@ -47,6 +50,15 @@ class Level:
 
         if len(self.core_conveyor_plants) == 0 and self.conveyor != None:
             self.core_conveyor_plants = set(self.conveyor.keys())
+
+    def list_zombies(self, wave_index = -1) -> list[str]:
+        zombie_list = self.zombies
+        if wave_index == -1:
+            for wave_of_zombies in self.vasebreaker_zombies:
+                zombie_list += list(wave_of_zombies.keys())
+        else:
+            zombie_list += list(self.vasebreaker_zombies[wave_index].keys())
+        return list(set(zombie_list))
 
     def randomise_zombies(self, world, zombie_blacklist):
         unmodified_zombies = copy.deepcopy(self.unmodified.zombies)
@@ -72,6 +84,11 @@ class Level:
             level_banned_zombies += ["Balloon"]
         elif self.special == "art":
             level_banned_zombies += ["Gargantuar", "GigaGargantuar", "TallnutHead", "JalapenoHead", "Zomboni", "Bungee"]
+        elif self.name == "Mini-games: Last Stand":
+            level_banned_zombies += ["GigaGargantuar"]
+
+        if self.on_ceramic and self.type == "Cloudy Day":
+            level_banned_zombies += [world.random.choice(["GatlingHead", "JalapenoHead"])] #Having two uber-destructive zombies on the roof in Cloudy Day is way too hard
 
         for zombie in level_banned_zombies:
             if zombie in possible_zombies:
@@ -178,13 +195,118 @@ class Level:
 
         self.conveyor = conveyor_weights
 
+    def randomise_zombie_vases(self, world, zombie_blacklist):
+        for wave_index in range (0, len(self.unmodified.vasebreaker_zombies)):
+            unmodified_wave_of_zombies = self.unmodified.vasebreaker_zombies[wave_index]
+
+            zombie_blacklist += ["Bungee", "Balloon", "Snorkel", "DolphinRider", "Digger"]
+            possible_zombies = [zombie_type for zombie_type in sorted(world.all_zombies.keys()) if zombie_type not in zombie_blacklist]
+
+            if self.vasebreaker_plants != None and world.options.vasebreaker_randomisation.value == 0:
+                eligible_zombies = self.eligible_zombies_for_loadout(world, list(self.vasebreaker_plants[wave_index].keys())) + list(unmodified_wave_of_zombies.keys())
+                possible_zombies = [zombie for zombie in possible_zombies if zombie in eligible_zombies]
+
+            target_zombie_total = sum(unmodified_wave_of_zombies.values())
+            zombie_types = {}
+            for zombie in unmodified_wave_of_zombies:
+                if not zombie in possible_zombies:
+                    zombie_types[zombie] = unmodified_wave_of_zombies[zombie]
+
+            vases_to_fill = target_zombie_total - sum(zombie_types.values())
+            additional_zombie_types = world.random.sample(possible_zombies, world.random.randint(1, vases_to_fill))
+            for zombie in additional_zombie_types:
+                zombie_types[zombie] = 1   
+        
+            zombie_maxes = {"Gargantuar": 5, "GigaGargantuar": 3}
+
+            weakest_to_strongest = sorted(additional_zombie_types, key=lambda zombie: world.all_zombies[zombie].value)
+            zombie_index = 0
+            while target_zombie_total - sum(zombie_types.values()) > 0:
+                zombie_type = weakest_to_strongest[zombie_index]
+
+                amount_to_add = min(1, target_zombie_total - sum(zombie_types.values()) * 0.5)
+                if zombie_type in zombie_maxes and zombie_types[zombie_type] + amount_to_add > zombie_maxes[zombie_type]:
+                    amount_to_add = zombie_maxes[zombie_type] - zombie_types[zombie_type]
+                zombie_types[zombie_type] += amount_to_add
+
+                zombie_index += 1
+                if zombie_index >= len(weakest_to_strongest):
+                    zombie_index = 0
+            
+            self.vasebreaker_zombies[wave_index] = zombie_types
+
+    def randomise_plant_vases(self, world):
+        for wave_index in range(0, len(self.unmodified.vasebreaker_plants)):
+            unmodified_wave_of_vases = self.unmodified.vasebreaker_plants[wave_index]
+            target_plant_total = sum(unmodified_wave_of_vases.values())
+
+            possible_threat_counters = self.create_plant_combinations(world, wave_index)
+            plants_to_use = []
+            for threat_name in possible_threat_counters:
+                possible_plants = possible_threat_counters[threat_name]
+                plants_to_use += world.random.choice(possible_threat_counters[threat_name])
+            plants_to_use = sorted(set(plants_to_use))
+
+            plant_types = {}
+            target_plant_amount = min(7, int((target_plant_total * 0.75) / len(plants_to_use)))
+            for plant in plants_to_use:
+                if plant == "Magnet-shroom":
+                    plant_types[plant] = min(target_plant_amount, 3)                
+                else:
+                    plant_types[plant] = target_plant_amount
+
+            vases_to_fill = target_plant_total - sum(plant_types.values())
+
+            #Utility
+            for plant in ["Plantern", "Cherry Bomb", "Squash"]:
+                amount_to_add = world.random.randint(0, min(2, vases_to_fill))
+                if amount_to_add > 0:
+                    if plant in plant_types:
+                        plant_types[plant] += world.random.randint(0, 2)
+                    else:
+                        plant_types[plant] = amount_to_add
+                vases_to_fill -= amount_to_add
+
+            #Walls
+            for x in range(0, world.random.randint(0, min(2, vases_to_fill))):
+                wall_plant = list(world.random.choice(world.wall_plants))[0]
+                if wall_plant in plant_types:
+                    plant_types[wall_plant] += 1
+                else:
+                    plant_types[wall_plant] = 1
+                vases_to_fill -= 1
+
+            #Random plants
+            ineligible_plants = ["Sea-shroom", "Lily Pad", "Cattail", "Sunflower", "Twin Sunflower", "Sun-shroom", "Grave Buster", "Tangle Kelp", "Blover", "Flower Pot", "Coffee Bean", "Umbrella Leaf", "Marigold", "Cob Cannon", "Gold Magnet"]
+            if not world.options.easy_upgrade_plants.value:
+                ineligible_plants += ["Gatling Pea", "Gloom-shroom", "Winter Melon", "Spikerock"]
+            if not any(zombie in self.vasebreaker_zombies[wave_index] for zombie in ["Football", "Buckethead", "Pogo", "ScreenDoor"]):
+                ineligible_plants += ["Magnet-shroom"]
+            if not ("Peashooter" in plant_types or "Repeater" in plant_types or "Threepeater" in plant_types):
+                ineligible_plants += ["Torchwood"]
+
+            possible_plants = [plant for plant in world.all_plants if not plant in ineligible_plants]
+            if plant == "Backwards Repeater (Vasebreaker)" and "Repeater" in world.usable_plants:
+                possible_plants.append("Backwards Repeater (Vasebreaker)")
+
+            while vases_to_fill > 0:
+                plant_to_add = world.random.choice(possible_plants)
+                amount_to_add = world.random.randint(1, min(3, vases_to_fill))
+                if plant_to_add in plant_types:
+                    plant_types[plant_to_add] += amount_to_add
+                else:
+                    plant_types[plant_to_add] = amount_to_add
+                vases_to_fill -= amount_to_add
+            
+            self.vasebreaker_plants[wave_index] = plant_types
+
     def requires_a_wall_plant(self):
         return self.type == "Survival" or self.name in ["Roof: Level 5-5", "Mini-games: Column Like You See 'Em", "Bonus Levels: High Gravity"] or any(zombie in self.zombies for zombie in ["PeaHead", "GatlingHead", "TallnutHead"])
 
     def can_clear(self, state, world, player):
         #Non-negotiables
         required_items = []
-        if self.on_roof and (self.name in ["Mini-games: Pogo Party", "Mini-games: Column Like You See 'Em"] or "GigaGargantuar" in self.zombies or self.type == "Cloudy Day"):
+        if self.on_roof and (self.name in ["Mini-games: Pogo Party", "Mini-games: Column Like You See 'Em"] or "GigaGargantuar" in self.zombies or self.type == "Cloudy Day" or self.flags >= 3):
             required_items.append("Roof Cleaners")
         if (self.name in ["Mini-games: Pogo Party", "Mini-games: Bobsled Bonanza", "Bonus Levels: Air Raid"] and "Gargantuar" in self.zombies) or (world.options.individual_tile_unlock_items.value and self.flags >= 2 and not self.ignore_locked_tiles):
             required_items.append("Shovel")
@@ -246,7 +368,7 @@ class Level:
             #Get relevant unlocked plants
             if self.plant_combinations == None:
                 self.plant_combinations = self.create_plant_combinations(world)
-            unlocked_plants = {plant for plant in world.progression_plants if (state.has(plant, player) or plant in self.forced_plants)}
+            unlocked_plants = {plant for plant in world.progression_plants if ((state.has(plant, player) or plant in self.forced_plants) and not plant in self.plant_banlist + ["Backwards Repeater (Vasebreaker)"])}
 
             if (not self.ignore_locked_tiles) and world.options.progressive_sun_capacity_items.value: #Check plants are affordable with sun cap limits
                 total_sun_capacity = 150 * (2 ** state.count("Progressive Sun Capacity", player))
@@ -283,13 +405,13 @@ class Level:
                     return False
             self.expected_loadout = selected_plants
 
-
         #Vasebreaker plant locks
         elif self.special == "vasebreaker" and world.options.lock_vasebreaker_plants.value:
-            total_vases = sum(self.vasebreaker_plants.values())
-            empty_vases = sum([self.vasebreaker_plants[plant] for plant in self.vasebreaker_plants if not state.has(plant, player)])
-            if (empty_vases/total_vases) > 0.05: #Level is OOL if more than 5% of vases are empty
-                return False 
+            for wave_of_vases in self.vasebreaker_plants:
+                total_vases = sum(wave_of_vases.values())
+                empty_vases = sum([wave_of_vases[plant] for plant in wave_of_vases if not state.has(plant, player)])
+                if (empty_vases/total_vases) > 0.05: #Level is OOL if more than 5% of vases are empty in a wave
+                    return False 
 
         #I, Zombie locks
         elif self.special == "izombie" and world.options.lock_izombie_zombies.value:
@@ -312,7 +434,7 @@ class Level:
                 
         return True
 
-    def create_plant_combinations(self, world):
+    def create_plant_combinations(self, world, wave_index = -1):
         possible_combinations = {}
 
         #Forced
@@ -328,20 +450,28 @@ class Level:
             possible_combinations["attacker"] = [{"Cabbage-pult"}, {"Kernel-pult"}, {"Melon-pult"}]
             if world.options.easy_upgrade_plants.value:
                 possible_combinations["attacker"].append({"Winter Melon"})
+        if self.special == "vasebreaker":
+            possible_combinations["attacker"].append({"Backwards Repeater (Vasebreaker)"})
+
+        if self.conveyor == None and self.special != "vasebreaker":
+            attacker_max_price = 200
+            if self.type == "Cloudy Day":
+                attacker_max_price = 150
+            for combination in possible_combinations["attacker"]:
+                combination_cost = 0
+                for plant in combination:
+                    combination_cost += world.all_plants[plant].cost
+                if combination_cost > attacker_max_price: #Nothing too expensive for your main attacker
+                    possible_combinations["attacker"].remove(combination)
 
         #Lily Pad
         if self.has_pool:
             possible_combinations["pool"] = [{"Lily Pad"}]
-            #Hard Difficulty - allow cattail or seashroom?
 
         #Flower Pot
         if self.on_ceramic:
             possible_combinations["flowerpot"] = [{"Flower Pot"}]
 
-        #Cloudy Day attackers
-        if self.type == "Cloudy Day":
-            possible_combinations["Cloudy Day"] = [{"Peashooter"}, {"Snow Pea"}, {"Repeater"}, {"Cactus"}, {"Cabbage-pult"}, {"Kernel-pult"}]
-        
         #Sun producers
         if self.choose and (self.type != "Adventure" or self.flags > 1 or self.at_night) and not self.name in ["Mini-games: Last Stand"]:
             if self.at_night:
@@ -354,7 +484,7 @@ class Level:
             possible_combinations["wall"] = [] + world.wall_plants
 
         #AOE plants
-        if self.type == "Survival" or self.name in ["Mini-games: Last Stand", "Mini-games: Column Like You See 'Em"]  or "GigaGargantuar" in self.zombies:
+        if self.type == "Survival" or self.name in ["Mini-games: Last Stand", "Mini-games: Column Like You See 'Em"]  or "GigaGargantuar" in self.list_zombies(wave_index):
             possible_combinations["aoe"] = [{"Melon-pult"}]
             if not (self.on_roof):
                 possible_combinations["aoe"] += [{"Repeater", "Torchwood"}, {"Threepeater", "Torchwood"}]
@@ -378,13 +508,21 @@ class Level:
             possible_combinations["bomb"] = [{"Cherry Bomb"}, {"Doom-shroom", "Coffee Bean"}, {"Ice-shroom", "Coffee Bean"}]
 
         #Balloon
-        if "Balloon" in self.zombies:
+        if "Balloon" in self.list_zombies(wave_index):
             possible_combinations["balloon"] = [{"Cactus"}, {"Blover"}]
             if self.has_pool:
                 possible_combinations["balloon"].append({"Cattail"})
 
+        #Ladder (Vasebreaker)
+        if any(zombie in self.list_zombies(wave_index) for zombie in ["Ladder"]) and self.special == "vasebreaker":
+            possible_combinations["ladder"] = [{"Magnet-shroom"}, {"Wall-nut"}, {"Tall-nut"}, {"Pumpkin"}, {"Jalapeno"}]
+
+        #Catapult (Vasebreaker)
+        if any(zombie in self.list_zombies(wave_index) for zombie in ["Catapult"]) and self.special == "vasebreaker":
+            possible_combinations["ladder"] = [{"Spikeweed"}, {"Spikerock"}, {"Jalapeno"}, {"Umbrella Leaf"}]
+
         #Shields
-        if any(zombie in self.zombies for zombie in ["ScreenDoor", "Ladder"]):
+        if any(zombie in self.list_zombies(wave_index) for zombie in ["ScreenDoor", "Ladder"]):
             possible_combinations["shield"] = [{"Cabbage-pult"}, {"Kernel-pult"}]
             if self.at_night:
                 possible_combinations["shield"] += [{"Fume-shroom"}, {"Magnet-shroom"}]
@@ -392,7 +530,7 @@ class Level:
                 possible_combinations["shield"] += [{"Fume-shroom", "Coffee Bean"}, {"Magnet-shroom", "Coffee Bean"}]
 
         #Digger
-        if "Digger" in self.zombies:
+        if "Digger" in self.list_zombies(wave_index):
             possible_combinations["digger"] = [{"Starfruit"}, {"Split Pea"}]
             if self.has_pool:
                 possible_combinations["digger"].append({"Cattail"})
@@ -402,13 +540,13 @@ class Level:
                 possible_combinations["digger"].append({"Magnet-shroom", "Coffee Bean"})
 
         #Snorkel
-        if "Snorkel" in self.zombies:
+        if "Snorkel" in self.list_zombies(wave_index):
             possible_combinations["snorkel"] = [{"Cabbage-pult"}, {"Kernel-pult"}, {"Melon-pult"}] + world.wall_plants
             if world.options.easy_upgrade_plants.value:
                 possible_combinations["snorkel"].append({"Winter Melon"})
 
         #Pogo
-        if "Pogo" in self.zombies:
+        if "Pogo" in self.list_zombies(wave_index):
             possible_combinations["pogo"] = [{"Split Pea"}, {"Starfruit"}, {"Tall-nut"}]
             if self.at_night:
                 possible_combinations["pogo"].append({"Magnet-shroom"})
@@ -418,7 +556,7 @@ class Level:
                 possible_combinations["pogo"].append({"Cattail"})
 
         #Football
-        if any(zombie in self.zombies for zombie in ["Football"]):
+        if any(zombie in self.list_zombies(wave_index) for zombie in ["Football"]):
             possible_combinations["football"] = [] + world.wall_plants
             if self.at_night:
                 possible_combinations["football"] += [{"Magnet-shroom"}, {"Hypno-shroom"}]
@@ -428,11 +566,11 @@ class Level:
                 possible_combinations["football"] += [{"Cherry Bomb"}, {"Squash"}, {"Jalapeno"}]
 
         #Magnet
-        if self.name in ["Bonus Levels: Unsodded"] and any(zombie in self.zombies for zombie in ["Football", "Buckethead", "Pogo", "ScreenDoor"]) and self.conveyor == None:        
+        if self.name in ["Bonus Levels: Unsodded"] and any(zombie in self.list_zombies(wave_index) for zombie in ["Football", "Buckethead", "Pogo", "ScreenDoor"]) and self.conveyor == None:        
             possible_combinations["magnet"] = [{"Magnet-shroom", "Coffee Bean"}]
 
         #Zomboni
-        if any(zombie in self.zombies for zombie in ["Zomboni"]):
+        if any(zombie in self.list_zombies(wave_index) for zombie in ["Zomboni"]):
             possible_combinations["zomboni"] = [{"Cherry Bomb"}, {"Squash"}, {"Jalapeno"}]
             if not self.on_roof:
                 possible_combinations["zomboni"].append({"Spikeweed"})
@@ -440,7 +578,7 @@ class Level:
                     possible_combinations["zomboni"].append({"Spikerock"})
 
         #Gargantuar
-        if any(zombie in self.zombies for zombie in ["Gargantuar", "GigaGargantuar"]):
+        if any(zombie in self.list_zombies(wave_index) for zombie in ["Gargantuar", "GigaGargantuar"]):
             if not self.name in ["Mini-games: Last Stand"]:       
                 possible_combinations["garg"] = [{"Cherry Bomb", "Squash"}, {"Squash", "Jalapeno"}, {"Jalapeno", "Cherry Bomb"}]
 
@@ -460,7 +598,7 @@ class Level:
             possible_combinations["bungeeblitz"] = [{"Cherry Bomb"}, {"Jalapeno"}, {"Squash"}, {"Chomper"}]
 
         #Bungee
-        if self.name in ["Mini-games: Bobsled Bonanza", "Mini-games: Pogo Party", "Bonus Levels: Air Raid"] and "Bungee" in self.zombies:
+        if self.name in ["Mini-games: Bobsled Bonanza", "Mini-games: Pogo Party", "Bonus Levels: Air Raid"] and "Bungee" in self.list_zombies(wave_index):
             possible_combinations["bungee_bonanza"] = [{"Umbrella Leaf"}]
             
         #Grave Buster
@@ -478,18 +616,22 @@ class Level:
                 possible_combinations["gravity"].append({"Gloom-shroom", "Coffee Bean"})
 
         #Spikeweed
-        if self.name in ["Mini-games: Bobsled Bonanza", "Mini-games: Pogo Party", "Bonus Levels: Air Raid"] and "Zomboni" in self.zombies:
+        if self.name in ["Mini-games: Bobsled Bonanza", "Mini-games: Pogo Party", "Bonus Levels: Air Raid"] and "Zomboni" in self.list_zombies(wave_index):
             possible_combinations["spikeweed"] = [{"Spikeweed"}]
             if world.options.easy_upgrade_plants.value:
                 possible_combinations["spikeweed"] += [{"Spikerock"}]
 
+        #Insta-kill
+        if (self.flags >= 3):
+            possible_combinations["insta"] = [{"Squash"}, {"Cherry Bomb"}, {"Jalapeno"}, {"Potato Mine"}]
+
         if world.usable_plants != []:
-            if self.conveyor == None: #Ensure only progression items are used for rule building (generally only needed for seed stat rando as plants can lose their progression status)
+            if self.conveyor == None and self.vasebreaker_plants == []: #Ensure only progression items are used for rule building (generally only needed for seed stat rando as plants can lose their progression status)
                 for threat in possible_combinations:
                     possible_combinations[threat] = [combo for combo in possible_combinations[threat] if all(plant in world.progression_plants for plant in combo)]
-            elif world.options.plant_stat_randomisation.value != 0: #Tries to only use actually good plants when building conveyor loadouts
+            elif world.options.plant_stat_randomisation.value != 0: #Tries to only use actually good plants when building conveyor/vasebreaker loadouts
                 for threat in possible_combinations:
-                    possible_combinations[threat] = [combo for combo in possible_combinations[threat] if all(plant in world.usable_plants for plant in combo)]
+                    possible_combinations[threat] = [combo for combo in possible_combinations[threat] if all((plant in world.usable_plants or (plant == "Backwards Repeater (Vasebreaker)" and "Repeater" in world.usable_plants)) for plant in combo)]
 
         return possible_combinations
 
@@ -499,7 +641,7 @@ class Level:
         potential_threats = copied_level_data.create_plant_combinations(world) 
 
         threat_to_zombie_name = {"balloon": ["Balloon"], "football": ["Football"], "zomboni": ["Zomboni"], "digger": ["Digger"], "pogo": ["Pogo"], "garg": ["Gargantuar"], "wall": ["PeaHead", "GatlingHead", "TallnutHead"]} #These Zombies become in-logic so long as this one specific threat is covered
-        eligible_zombies = ["Normal", "Flag", "Conehead", "Polevaulter", "Buckethead", "Newspaper", "Dancer", "DolphinRider", "JackInTheBox", "Digger", "Bungee", "Catapult", "JalapenoHead", "SquashHead", "TrashCan"] #These zombies have 0 logic attached to them
+        eligible_zombies = ["Normal", "Flag", "Conehead", "Polevaulter", "Buckethead", "Newspaper", "Dancer", "DolphinRider", "JackInTheBox", "Digger", "Bungee", "Catapult", "JalapenoHead", "SquashHead", "TrashCan", "Imp"] #These zombies have 0 logic attached to them
         covered_threats = []
 
         for threat in potential_threats:
@@ -942,7 +1084,8 @@ def create_levels(world = None):
             unlock_item_name = "Fog Unlock: Level 4-5",
             level_id = 35,
             ignore_locked_tiles = True,
-            vasebreaker_plants = {"Peashooter": 5 + 4 + 5, "Snow Pea": 5 + 5, "Squash": 5 + 4, "Hypno-shroom": 5}
+            vasebreaker_plants = [{"Peashooter": 5, "Squash": 5}, {"Peashooter": 4, "Snow Pea": 5, "Squash": 4}, {"Peashooter": 5, "Snow Pea": 5, "Hypno-shroom": 5}],
+            vasebreaker_zombies = [{"Buckethead": 1, "Normal": 4}, {"Normal": 5, "Buckethead": 1, "Football": 1}, {"Normal": 6, "Buckethead": 2, "Dancer": 1, "JackInTheBox": 1}]
         ),
 
         "4-6": Level(
@@ -1432,7 +1575,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: Vasebreaker",
                 level_id = 71,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Peashooter": 5, "Snow Pea": 5, "Squash": 5}
+                vasebreaker_plants = [{"Peashooter": 5, "Snow Pea": 5, "Squash": 5}],
+                vasebreaker_zombies = [{"Normal": 6, "Buckethead": 3, "JackInTheBox": 1}]
             ),
 
             "ScaryPotter2": Level(
@@ -1447,7 +1591,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: To The Left",
                 level_id = 72,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Backwards Repeater (Vasebreaker)": 7, "Wall-nut": 3, "Potato Mine": 2, "Snow Pea": 3}
+                vasebreaker_plants = [{"Backwards Repeater (Vasebreaker)": 7, "Wall-nut": 3, "Potato Mine": 2, "Snow Pea": 3}],
+                vasebreaker_zombies = [{"Normal": 6, "Buckethead": 3, "JackInTheBox": 1}]
             ),
 
             "ScaryPotter3": Level(
@@ -1462,8 +1607,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: Third Vase",
                 level_id = 73,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Wall-nut": 3, "Snow Pea": 4, "Backwards Repeater (Vasebreaker)": 6, "Hypno-shroom": 3, "Squash": 2}
-
+                vasebreaker_plants = [{"Wall-nut": 3, "Snow Pea": 4, "Backwards Repeater (Vasebreaker)": 6, "Hypno-shroom": 3, "Squash": 2}],
+                vasebreaker_zombies = [{"Normal": 8, "Buckethead": 2, "JackInTheBox": 1, "Dancer": 1}]
             ),
 
             "ScaryPotter4": Level(
@@ -1478,7 +1623,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: Chain Reaction",
                 level_id = 74,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Backwards Repeater (Vasebreaker)": 4, "Puff-shroom": 11, "Hypno-shroom": 4}
+                vasebreaker_plants = [{"Backwards Repeater (Vasebreaker)": 4, "Puff-shroom": 11, "Hypno-shroom": 4}],
+                vasebreaker_zombies = [{"Normal": 7, "Football": 1, "JackInTheBox": 8}]
             ),
 
             "ScaryPotter5": Level(
@@ -1493,7 +1639,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: M is for Metal",
                 level_id = 75,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Snow Pea": 2, "Backwards Repeater (Vasebreaker)": 6, "Hypno-shroom": 2, "Squash": 4, "Pumpkin": 3, "Magnet-shroom": 3}
+                vasebreaker_plants = [{"Snow Pea": 2, "Backwards Repeater (Vasebreaker)": 6, "Hypno-shroom": 2, "Squash": 4, "Pumpkin": 3, "Magnet-shroom": 3}],
+                vasebreaker_zombies = [{"Normal": 7, "Football": 3, "Buckethead": 4, "JackInTheBox": 1}]
             ),
 
             "ScaryPotter6": Level(
@@ -1508,7 +1655,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: Scary Potter",
                 level_id = 76,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Backwards Repeater (Vasebreaker)": 7, "Squash": 2, "Threepeater": 2, "Torchwood": 4, "Tall-nut": 5}
+                vasebreaker_plants = [{"Backwards Repeater (Vasebreaker)": 7, "Squash": 2, "Threepeater": 2, "Torchwood": 4, "Tall-nut": 5}],
+                vasebreaker_zombies = [{"Normal": 7, "Football": 2, "Polevaulter": 5, "JackInTheBox": 1}]
             ),
 
             "ScaryPotter7": Level(
@@ -1523,8 +1671,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: Hokey Pokey",
                 level_id = 77,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Wall-nut": 3, "Squash": 3, "Spikeweed": 13}
-
+                vasebreaker_plants = [{"Wall-nut": 3, "Squash": 3, "Spikeweed": 13}],
+                vasebreaker_zombies = [{"Normal": 10, "Buckethead": 1}]
             ),
 
             "ScaryPotter8": Level(
@@ -1539,7 +1687,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: Another Chain Reaction",
                 level_id = 78,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Backwards Repeater (Vasebreaker)": 4, "Puff-shroom": 7, "Squash": 5, "Tall-nut": 3}
+                vasebreaker_plants = [{"Backwards Repeater (Vasebreaker)": 4, "Puff-shroom": 7, "Squash": 5, "Tall-nut": 3}],
+                vasebreaker_zombies = [{"Normal": 4, "Pogo": 4, "JackInTheBox": 8}]
             ),
 
             "ScaryPotter9": Level(
@@ -1554,7 +1703,8 @@ def create_levels(world = None):
                 unlock_item_name = "Puzzle Unlock: Ace of Vase",
                 level_id = 79,
                 ignore_locked_tiles = True,
-                vasebreaker_plants = {"Peashooter": 2, "Wall-nut": 1, "Potato Mine": 1, "Snow Pea": 2, "Backwards Repeater (Vasebreaker)": 6, "Squash": 5, "Threepeater": 2, "Plantern": 1}
+                vasebreaker_plants = [{"Peashooter": 2, "Wall-nut": 1, "Potato Mine": 1, "Snow Pea": 2, "Backwards Repeater (Vasebreaker)": 6, "Squash": 5, "Threepeater": 2, "Plantern": 1}],
+                vasebreaker_zombies = [{"Normal": 8, "Buckethead": 5, "JackInTheBox": 1, "Gargantuar": 1}]
             ),
 
             "PuzzleIZombie1": Level(
@@ -2130,8 +2280,8 @@ def create_levels(world = None):
     return levels
 
 def randomise_zombie_lists(world):
-    zombie_blacklist = ["Normal", "Flag", "DuckyTube", "Yeti", "Target", "Zombatar", "Imp", "Boss", "Bobsled", "BackupDancer"]
-    for zombie in ["Conehead", "Polevaulter", "Buckethead", "Newspaper", "ScreenDoor", "Football", "Dancer", "Snorkel", "Zomboni", "DolphinRider", "JackInTheBox", "Balloon", "Digger", "Pogo", "Bungee", "Ladder", "Catapult", "Gargantuar", "PeaHead", "WallnutHead", "JalapenoHead", "GatlingHead", "SquashHead", "TallnutHead", "GigaGargantuar", "TrashCan"]:
+    zombie_blacklist = ["Normal", "Flag", "DuckyTube", "Yeti", "Target", "Zombatar", "Boss", "Bobsled", "BackupDancer"]
+    for zombie in ["Conehead", "Polevaulter", "Buckethead", "Newspaper", "ScreenDoor", "Football", "Dancer", "Snorkel", "Zomboni", "DolphinRider", "JackInTheBox", "Balloon", "Digger", "Pogo", "Bungee", "Ladder", "Catapult", "Gargantuar", "PeaHead", "WallnutHead", "JalapenoHead", "GatlingHead", "SquashHead", "TallnutHead", "GigaGargantuar", "TrashCan", "Imp"]:
         if (zombie not in world.options.randomised_zombies.value) or world.options.randomised_zombies.value[zombie] == 0:
             zombie_blacklist.append(zombie)
 
@@ -2142,7 +2292,9 @@ def randomise_zombie_lists(world):
 
     for level in world.included_levels:
         level_data = world.included_levels[level]
-        if level_data.type in permitted_zombie_rando_modes and not (level_data.special in ["beghouled", "slot", "zombiquarium", "whack", "boss", "vasebreaker", "izombie"]):
+        if "Vasebreaker" in permitted_zombie_rando_modes and len(level_data.vasebreaker_zombies) > 0:
+            world.included_levels[level].randomise_zombie_vases(world, zombie_blacklist)
+        elif level_data.type in permitted_zombie_rando_modes and not (level_data.special in ["beghouled", "slot", "zombiquarium", "whack", "boss", "vasebreaker", "izombie"]):
             world.included_levels[level].randomise_zombies(world, zombie_blacklist)
 
 def randomise_conveyors(world):
@@ -2150,4 +2302,9 @@ def randomise_conveyors(world):
         level_data = world.included_levels[level]
         if level_data.conveyor != None and not (level_data.special in ["bowling"]): #Don't randomise Wall-nut Bowling levels
             world.included_levels[level].randomise_conveyor(world)
-            
+        
+def randomise_plant_vases(world):
+    for level in world.included_levels:
+        level_data = world.included_levels[level]
+        if len(level_data.vasebreaker_plants) > 0 and len(level_data.vasebreaker_zombies) > 0:
+            world.included_levels[level].randomise_plant_vases(world)

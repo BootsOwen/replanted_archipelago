@@ -129,6 +129,8 @@ class Plant:
                 firing_cooldown_multiplier = base_number - (weighted_roll(world, maximum_firing_cooldown_mult_loss * 100, 2) / 100)
 
             firing_cooldown_multiplier = max(0.3, firing_cooldown_multiplier)
+            if self.projectiles_per_shot == 4:
+                firing_cooldown_multiplier = max(0.4, firing_cooldown_multiplier)
 
             self.firing_cooldown = round(self.unmodified.firing_cooldown * firing_cooldown_multiplier)
 
@@ -243,6 +245,8 @@ class Plant:
             max_sun_cost = 50
         elif world.options.progressive_sun_capacity_items.value and self.name == world.starting_plants[0]:
             max_sun_cost = 135
+        elif self.name == world.starting_plants[0]:
+            max_sun_cost = 225
 
         exceeded_sun_cost = self.cost - max_sun_cost
         if exceeded_sun_cost > 0:
@@ -293,7 +297,7 @@ def create_plants():
         "Sun-shroom": Plant(name = "Sun-shroom", cost = 25, firing_cooldown = 2500, nocturnal = True, plant_id = 9),
         "Fume-shroom": Plant(name = "Fume-shroom", cost = 75, firing_cooldown = 150, nocturnal = True, bypass_roof_angle = True, plant_id = 10),
         "Grave Buster": Plant(name = "Grave Buster", cost = 75, can_wall = False, plant_id = 11),
-        "Hypno-shroom": Plant(name = "Hypno-shroom", cost = 75, packet_cooldown = 3000, nocturnal = True, effect = "Hypnotise", plant_id = 12),
+        "Hypno-shroom": Plant(name = "Hypno-shroom", cost = 75, packet_cooldown = 3000, nocturnal = True, can_wall = False, effect = "Hypnotise", plant_id = 12),
         "Scaredy-shroom": Plant(name = "Scaredy-shroom", cost = 25, projectiles = ["Spore"], firing_cooldown = 150, nocturnal = True, plant_id = 13),
         "Ice-shroom": Plant(name = "Ice-shroom", cost = 75, packet_cooldown = 5000, nocturnal = True, can_wall = False, effect = "Freeze", plant_id = 14),
         "Doom-shroom": Plant(name = "Doom-shroom", cost = 125, packet_cooldown = 5000, nocturnal = True, damage = 1800, explosive = True, can_wall = False, plant_id = 15),
@@ -355,7 +359,7 @@ def randomise_plant_stats(world):
 
     for level in level_keys:
         level_data = world.included_levels[level]
-        if level_data.conveyor != None:
+        if level_data.conveyor != None or level_data.special == "vasebreaker":
             level_type_key = "conveyor"
         elif level_data.choose:
             level_type_key = "standard"
@@ -390,9 +394,15 @@ def randomise_plant_stats(world):
     usable_projectiles = []
     plantable_projectiles = []
     for plant in usable_plants:
-        usable_projectiles += world.all_plants[plant].projectiles
+        if plant == "Backwards Repeater (Vasebreaker)":
+            usable_projectiles += world.all_plants["Repeater"].projectiles
+        else:
+            usable_projectiles += world.all_plants[plant].projectiles
     for plant in plantable_plants:
-        plantable_projectiles += world.all_plants[plant].projectiles
+        if plant == "Backwards Repeater (Vasebreaker)":
+            plantable_projectiles += world.all_plants["Repeater"].projectiles
+        else:
+            plantable_projectiles += world.all_plants[plant].projectiles
 
     #Create a list of projectiles to NOT be randomised
     projectile_blacklist = []
