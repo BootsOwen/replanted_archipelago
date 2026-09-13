@@ -115,7 +115,7 @@ class ZombieRandomisedModes(OptionCounter):
 
 class ConveyorRandomisation(Toggle):
     """
-    Randomises the seed packet types present on Conveyor Belt levels.
+    Randomises the seed packet types present in Conveyor Belt levels.
     """
     display_name = "Conveyor Randomisation"
     default = False
@@ -133,8 +133,9 @@ class PlantStatRandomisation(Toggle):
     This affects Sun Cost, Packet Refresh Time, Toughness, Firing Rate and Projectile Damage.
     Plants should remain relatively balanced while still providing variety.
 
-    While this affects the majority of levels in the game, it doesn't affect Puzzle levels or certain Mini-game levels.
+    While this affects the majority of levels in the game, it doesn't affect certain Mini-game and Puzzle levels.
     It only affects Conveyor Belt levels if conveyor_randomisation is set to true.
+    It only affects Vasebreaker levels if vasebreaker_randomisation is set to true.
     """
     display_name = "Plant Stat Randomisation"
     default = False  
@@ -984,11 +985,11 @@ class PVZROptions(PerGameCommonOptions):
     maximum_sun_upgrades: MaximumSunUpgrades
     mower_reward_upgrades: MowerRewardUpgrades
     shuffle_butter_ability: ShuffleButterAbility
-    rake_filler: RakeFiller
     random_seed_filler: RandomSeedFiller
     zombie_freeze_filler: ZombieFreezeFiller
     zombie_hypnosis_filler: ZombieHypnosisFiller
     sun_burst_filler: SunBurstFiller
+    rake_filler: RakeFiller
     starting_plants: StartingPlants
     starting_seed_slots: StartingSeedSlots
     early_sunflower: EarlySunflower
@@ -1020,6 +1021,6 @@ OPTION_GROUPS = [
     OptionGroup("Goal", [AdventureLevelsGoal, AdventureAreasGoal, MinigameLevelsGoal, PuzzleLevelsGoal, SurvivalLevelsGoal, CloudyDayLevelsGoal, BonusLevelsGoal, TotalLevelsGoal, TacoHuntItems, TacoHuntPercentage, FastGoal]),
     OptionGroup("Zombie & Plant Randomisation", [ConveyorRandomisation, VasebreakerRandomisation, ZombieRandomisation, RandomisedZombies, ZombieRandomisedModes, ZombieWeightRandomisation, PlantStatRandomisation, MaintainVanillaProjectileStrength, PlantStatRandomisationBlacklist]),
     OptionGroup("Game Tweaks", [LockConveyorPlants, LockVasebreakerPlants, LockIZombieZombies, EasyUpgradePlants, ImitaterBehaviour, RandomlyBannedPlantsPerLevel, HarderZombieSpawns, DisableStormFlashes, MusicShuffle, CostumeChances]),
-    OptionGroup("Item Generation", [ZenGardenItems, StartingSunUpgrades, MaximumSunUpgrades, MowerRewardUpgrades, ShuffleButterAbility, RakeFiller, RandomSeedFiller, ZombieFreezeFiller, ZombieHypnosisFiller, SunBurstFiller, StartingPlants, StartingSeedSlots, EarlySunflower, EarlyShovel, EarlyZenGarden, ProgressiveSunCapacityItems, IndividualTileUnlockItems]),
+    OptionGroup("Item Generation", [ZenGardenItems, StartingSunUpgrades, MaximumSunUpgrades, MowerRewardUpgrades, ShuffleButterAbility, RandomSeedFiller, ZombieFreezeFiller, ZombieHypnosisFiller, SunBurstFiller, RakeFiller, StartingPlants, StartingSeedSlots, EarlySunflower, EarlyShovel, EarlyZenGarden, ProgressiveSunCapacityItems, IndividualTileUnlockItems]),
     OptionGroup("Traps", [TrapPercentage, MowerDeployTrapWeight, SeedPacketCooldownTrapWeight, ZombieAmbushTrapWeight, ZombieShuffleTrapWeight, ZombieCaffeineTrapWeight, ZombieGrowthSerumTrapWeight, InvisighoulTrapWeight, RVTrapWeight, CraterTrapWeight, LawnFlipTrapWeight, LawnRandomiserTrapWeight, SeedBankRandomiserTrapWeight, ParanoiaTrapWeight, LadderTrapWeight]),
 ]
