@@ -656,9 +656,9 @@ namespace ReplantedArchipelago.Patches
                         {
                             if (__instance.Board.ChooseSeedsOnCurrentLevel())
                             {
+                                List<SeedType> alreadyChosenPackets = new List<SeedType>();
                                 foreach (SeedPacket seedPacket in board.SeedBanks[0].SeedPackets)
                                 {
-                                    List<SeedType> alreadyChosenPackets = new List<SeedType>();
                                     if (seedPacket != null && seedPacket.PacketType != SeedType.None)
                                     {
                                         seedPacket.mPacketType = Data.GetFreeSeedType(board, true);
@@ -2372,7 +2372,6 @@ namespace ReplantedArchipelago.Patches
                 }
             }
         }
-
 
         [HarmonyPatch(typeof(SeedChooserScreen), nameof(SeedChooserScreen.SeedNotAllowedToPick))]
         public static class SeedNotAllowedToPickPatch

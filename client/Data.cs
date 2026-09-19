@@ -153,7 +153,8 @@ namespace ReplantedArchipelago
             { 99, "Randomises the seeds in your seed bank" },
             { 2001, "Puts you on edge" },
             { 2002, "Places ladders on your plants" },
-            { 2003, "Turns zombies big and scary" }
+            { 2003, "Turns zombies big and scary" },
+            { 2004, "Butter zombies at will" }
         };
 
         public static Dictionary<long, CoinType> awardCoinTypes = new Dictionary<long, CoinType>

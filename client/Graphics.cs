@@ -328,7 +328,8 @@ namespace ReplantedArchipelago
             { "SPR_ShovelHiRes", 0.4f },
             { "SPR_Almanac_Seedpackets_Explode-o-nut", 0.5f },
             { "SPR_Almanac_Seedpackets_GiantWallnut", 0.5f },
-            { "SPR_Almanac_Seedpackets_Leftpeater", 0.5f }
+            { "SPR_Almanac_Seedpackets_Leftpeater", 0.5f },
+            { "SPR_Butter", 0.015f }
         };
 
         public static (Sprite sprite, float scale) GetSpriteAndScaleForItemDrop(ItemInfo itemInfo)
