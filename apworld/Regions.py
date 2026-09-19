@@ -26,6 +26,21 @@ def can_access_level(state, world, player, level_data):
     if (access_item is not None) and (not state.has(access_item, player)):
         return False
             
+    #Adventure progress
+    if level_data.type == "Adventure" and not level_data.name == "Roof: Dr. Zomboss" and world.options.adventure_mode_progression.value in [0, 1]:
+        #Progress in prior areas (Linear only)
+        if world.options.adventure_mode_progression.value == 0: 
+            level_areas = ["Day", "Night", "Pool", "Fog", "Roof"]
+            prior_areas = level_areas[:level_areas.index(level_data.location)]
+            for area in prior_areas:
+                if not state.has(f"Adventure Level Cleared (Area: {area})", player, 10):
+                    return False
+
+        #Progress in the current area (Linear/Area Access)
+        level_number = int(level_data.name.split("-")[-1]) #Get the level's position in its world
+        if not state.has(f"Adventure Level Cleared (Area: {level_data.location})", player, level_number - 1):
+            return False
+
     #Clears
     if level_data.type == "Mini-games" and world.options.minigame_levels.value in [1, 2] and world.minigame_unlocks[level_data.level_id] > 0:
         if not state.has("Mini-games Level Cleared", player, world.minigame_unlocks[level_data.level_id]):
@@ -91,10 +106,7 @@ def create_regions(world: World) -> None:
         multiworld.regions.append(level_region)
         level_region.locations += [PVZRLocation(player, LOCATION_NAME_FROM_ID[location], location, level_region) for location in region_locations]
 
-        if level_data.type in ["Mini-games", "Bonus Levels", "Puzzle", "Survival", "Cloudy Day", "China"] or (level_data.type == "Adventure" and (level_data.name == "Roof: Dr. Zomboss" or (world.options.adventure_mode_progression.value == 1 and adventure_level_index % 10 == 0) or (world.options.adventure_mode_progression.value in [2, 3]))):
-            menu_region.connect(connecting_region = level_region,  rule = make_region_rule(world, player, level_data))
-        elif level_data.type == "Adventure":
-            previous_region.connect(connecting_region = level_region,  rule = make_region_rule(world, player, level_data))
+        menu_region.connect(connecting_region = level_region,  rule = make_region_rule(world, player, level_data))
 
         level_clear_event_location = PVZRLocation(player, f"{level_data.name} (Level Clear)", None, level_region)
         if (level_data.type == "Adventure"):
@@ -111,8 +123,6 @@ def create_regions(world: World) -> None:
 
         if level_data.name == "Roof: Dr. Zomboss":
             multiworld.register_indirect_condition(multiworld.get_region("Roof: Level 5-9", player), level_region.entrances[0])
-
-        previous_region = level_region
 
         if level_data.type == "Adventure":
             adventure_level_index += 1

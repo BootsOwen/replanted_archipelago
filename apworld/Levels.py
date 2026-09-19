@@ -221,6 +221,7 @@ class Level:
 
             weakest_to_strongest = sorted(additional_zombie_types, key=lambda zombie: world.all_zombies[zombie].value)
             zombie_index = 0
+            loops_completed = 0
             while target_zombie_total - sum(zombie_types.values()) > 0:
                 zombie_type = weakest_to_strongest[zombie_index]
 
@@ -232,6 +233,14 @@ class Level:
                 zombie_index += 1
                 if zombie_index >= len(weakest_to_strongest):
                     zombie_index = 0
+                    loops_completed += 1
+
+                #Prevent a rare infinite loop
+                if loops_completed > 20:
+                    if "Normal" in zombie_types:
+                        zombie_types["Normal"] += target_zombie_total - sum(zombie_types.values())
+                    else:
+                        zombie_types["Normal"] = target_zombie_total - sum(zombie_types.values())
             
             self.vasebreaker_zombies[wave_index] = zombie_types
 
@@ -431,7 +440,7 @@ class Level:
                 return False
             if self.name == "Mini-games: Wall-nut Bowling 2" and not state.has("Giant Wall-nut (Wall-nut Bowling)", player):
                 return False
-                
+        
         return True
 
     def create_plant_combinations(self, world, wave_index = -1):
@@ -457,6 +466,21 @@ class Level:
             attacker_max_price = 200
             if self.type == "Cloudy Day":
                 attacker_max_price = 150
+            
+            #Check to see if a plant even exists at such a low price
+            actual_lowest_price = 999
+            for combination in possible_combinations["attacker"]:
+                combination_cost = 0
+                for plant in combination:
+                    combination_cost += world.all_plants[plant].cost
+                if combination_cost < actual_lowest_price:
+                    actual_lowest_price = combination_cost
+
+            #No such plant exists, so move the goal posts to be a little lenient (sorry, player)
+            if actual_lowest_price > attacker_max_price:
+                attacker_max_price = actual_lowest_price
+
+            #Remove combinations that don't meed the requirement
             for combination in possible_combinations["attacker"]:
                 combination_cost = 0
                 for plant in combination:

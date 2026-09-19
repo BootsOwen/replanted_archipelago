@@ -426,8 +426,7 @@ class StartingPlants(Range):
 class StartingSeedSlots(Range):
     """
     How many seed slots to begin the game with.
-
-    *Choosing to start with fewer than three seed slots may result in generation failures.
+    You will be able to unlock additional seed slots as items.
     """
     display_name = "Starting Seed Slots"
     range_start = 1
@@ -811,9 +810,12 @@ class CostumeChances(OptionCounter):
 class GotyCompatabilityMode(Toggle):
     """
     This APWorld is primarily designed to be used with Plants vs. Zombies: Replanted.
+    All features and options within this YAML are fully supported by Plants vs. Zombies: Replanted.
 
     If you wish to connect to this world using Victor Tran's GOTY client, you can - but there are certain limitations.
-    Enabling this option will automatically adjust your YAML to ensure it is compatible with these restrictions.
+    The GOTY client is not 100% compatible with all options, and may not be up to date with the latest APWorld version.
+    It's recommended you double check the latest APWorld version supported by the GOTY client before generating a game.
+    Enabling this option will automatically disable any features exclusive to Plants vs. Zombies: Replanted.
     """
     display_name = "GOTY Compatability Mode"
     default = False

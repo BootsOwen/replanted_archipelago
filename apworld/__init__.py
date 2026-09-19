@@ -62,14 +62,13 @@ class PVZRWorld(World):
     }
     
     location_name_groups = {
-        "Crazy Dave's Twiddydinkies": {f"Crazy Dave's Twiddydinkies: Item #{str(x + 1)}" for x in range(0, 200)}, # Should probably be taking them directly from Locations.py instead of incrementing the number manually but I'm not smart enough to do that sorry
-    
-        "Adventure (Clear)": {f"{level.name} (Clear)" for level in create_levels().values() if level.type == "Adventure" and level.name != "Roof: Dr. Zomboss"}, # Excludes beating Dr. Zomboss since I'm pretty sure it's meant to always give the music video item. I figure trying to use something like plando would mess up if it was included
+        "Adventure (Clear)": {f"{level.name} (Clear)" for level in create_levels().values() if level.type == "Adventure" and level.name != "Roof: Dr. Zomboss"},
         "Mini-games (Clear)": {f"{level.name} (Clear)" for level in create_levels().values() if level.type == "Mini-games"},
         "Puzzle (Clear)": {f"{level.name} (Clear)" for level in create_levels().values() if level.type == "Puzzle"},
         "Survival (Clear)": {f"{level.name} (Clear)" for level in create_levels().values() if level.type == "Survival"},
         "Bonus Level (Clear)": {f"{level.name} (Clear)" for level in create_levels().values() if level.type == "Bonus Levels"},
-        "Cloudy Day (Clear)": {f"{level.name} (Clear)" for level in create_levels().values() if level.type == "Cloudy Day"}
+        "Cloudy Day (Clear)": {f"{level.name} (Clear)" for level in create_levels().values() if level.type == "Cloudy Day"},
+        "Crazy Dave's Twiddydinkies": {f"Crazy Dave's Twiddydinkies: Item #{str(x + 1)}" for x in range(0, 200)}
     }
 
     ut_can_gen_without_yaml = True
@@ -723,9 +722,9 @@ class PVZRWorld(World):
         #Plant banlist
         self.plant_banlist = {}
         for level in self.included_levels:
-            if self.included_levels[level].choose:
+            if self.included_levels[level].choose and self.included_levels[level].expected_loadout != None:
                 available_plants = [plant for plant in self.all_plants.values() if not plant.name in self.included_levels[level].expected_loadout]
-                level_plant_banlist = self.random.sample(available_plants, self.options.randomly_banned_plants_per_level.value)
+                level_plant_banlist = self.random.sample(available_plants, min(len(available_plants), self.options.randomly_banned_plants_per_level.value))
                 self.included_levels[level].plant_banlist = [plant.name for plant in level_plant_banlist]
                 self.plant_banlist[self.included_levels[level].level_id] = [plant.plant_id for plant in level_plant_banlist]
 
@@ -765,14 +764,14 @@ class PVZRWorld(World):
     
     def create_item(self, name: str) -> PVZRItem:
         try:
-            if name in self.starting_items or name in self.preplaced_progression or name in self.progression_item_names:
-                item_classification = ItemClassification.progression
+            if name in self.filler_item_names:
+                item_classification = ItemClassification.filler
             elif name in self.useful_item_names:
                 item_classification = ItemClassification.useful
             elif name in self.trap_item_names:
                 item_classification = ItemClassification.trap
             else:
-                item_classification = ItemClassification.filler
+                item_classification = ItemClassification.progression
         except:
             item_classification = ItemClassification.progression
 

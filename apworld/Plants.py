@@ -390,6 +390,12 @@ def randomise_plant_stats(world):
     #These will be affordable/similar cooldown to their usual
     plantable_plants = sorted(set(used_plants["standard"] + [world.starting_plants[0]]))
 
+    #Ensures there's a cheap catapult
+    cheap_catapult = world.random.choice(["Kernel-pult", "Cabbage-pult"])
+    if not (cheap_catapult in usable_plants and cheap_catapult in plantable_plants):
+        usable_plants.append(cheap_catapult)
+        plantable_plants.append(cheap_catapult)
+
     #Decide which projectiles can be messed with moreso than others
     usable_projectiles = []
     plantable_projectiles = []
