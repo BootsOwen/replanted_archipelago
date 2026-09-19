@@ -58,7 +58,9 @@ def can_access_level(state, world, player, level_data):
         if not state.has("Cloudy Day Level Cleared", player, world.cloudy_day_unlocks[level_data.level_id]):
             return False
     elif level_data.name == "Roof: Dr. Zomboss":
-        if world.fast_goal == False and not state.can_reach_location("Roof: Level 5-9 (Clear)", player):
+        if world.fast_goal == False and world.options.adventure_mode_progression.value in [0, 1] and not state.has("Adventure Level Cleared (Area: Roof)", player, 9):
+            return False
+        if world.fast_goal == False and world.options.adventure_mode_progression.value == 2 and not state.has("Roof Access", player):
             return False
         if world.adventure_levels_goal > 0 and get_cleared_adventure_levels(state, world, player) < world.adventure_levels_goal:
             return False
@@ -120,9 +122,6 @@ def create_regions(world: World) -> None:
             level_clear_event_item_name = f"{level_data.type} Level Cleared"
         level_clear_event_location.place_locked_item(PVZRItem(level_clear_event_item_name, ItemClassification.progression, None, player))
         level_region.locations.append(level_clear_event_location)
-
-        if level_data.name == "Roof: Dr. Zomboss":
-            multiworld.register_indirect_condition(multiworld.get_region("Roof: Level 5-9", player), level_region.entrances[0])
 
         if level_data.type == "Adventure":
             adventure_level_index += 1
